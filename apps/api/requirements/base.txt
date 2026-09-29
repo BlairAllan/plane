@@ -16,6 +16,14 @@ django-redis==7.0.0
 django-cors-headers==4.9.0
 # celery
 celery==5.5.3
+# Pub/Sub as the Celery broker. kombu already ships a `gcpubsub://` transport;
+# it only needs the Google client libraries to import. This is what lets the
+# stack run on Cloud Run, where there is managed Postgres and managed Valkey but
+# no managed AMQP — RabbitMQ was the one dependency with nowhere to live.
+google-cloud-pubsub==2.31.1
+# kombu's transport reads queue depth from Cloud Monitoring, so it imports
+# monitoring_v3 at module load even when nothing asks for a metric.
+google-cloud-monitoring==2.27.1
 django_celery_beat==2.9.0
 django-celery-results==2.6.0
 # file serve
