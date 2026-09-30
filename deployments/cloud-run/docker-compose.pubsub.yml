@@ -1,0 +1,43 @@
+# Celery on Pub/Sub instead of RabbitMQ, so the stack maps onto Cloud Run.
+#
+# RabbitMQ was the one service with nowhere to live on GCP: there is managed
+# Postgres and managed Valkey, but no managed AMQP. Running a broker on a VM
+# purely to satisfy one dependency drags the whole stack back onto machines
+# somebody has to patch.
+#
+# Locally the Pub/Sub emulator stands in for the real service. The only thing
+# that changes on Cloud Run is dropping PUBSUB_EMULATOR_HOST and pointing
+# AMQP_URL at a real project — the same compose file describes both.
+#
+# Requires the forked backend image, which adds the Google client libraries
+# kombu's gcpubsub transport needs. See this fork (apps/api/requirements/base.txt).
+services:
+  # No managed AMQP on GCP, and now nothing that wants one.
+  plane-mq:
+    deploy:
+      replicas: 0
+
+  pubsub:
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+    command: >-
+      gcloud beta emulators pubsub start
+      --project=plane-local --host-port=0.0.0.0:8085
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+
+  api: &pubsub-env
+    image: ${PLANE_BACKEND_IMAGE:-plane-backend:pubsub}
+    environment:
+      AMQP_URL: gcpubsub://projects/plane-local
+      PUBSUB_EMULATOR_HOST: pubsub:8085
+      # The client library insists on a project even against the emulator.
+      GOOGLE_CLOUD_PROJECT: plane-local
+    depends_on:
+      - pubsub
+
+  worker: *pubsub-env
+  beat-worker: *pubsub-env
+  migrator:
+    image: ${PLANE_BACKEND_IMAGE:-plane-backend:pubsub}
