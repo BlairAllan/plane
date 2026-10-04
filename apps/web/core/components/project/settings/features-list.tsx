@@ -17,7 +17,6 @@ import { SettingsHeading } from "@/components/settings/heading";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
 // plane web imports
-import { UpgradeBadge } from "@/components/workspace/upgrade-badge";
 // local imports
 import { ProjectFeatureToggle } from "./helper";
 
@@ -119,11 +118,6 @@ export const ProjectFeaturesList = observer(function ProjectFeaturesList(props: 
                 title={
                   <span className="flex items-center gap-2">
                     {t(featureItem.key)}
-                    {featureItem.isPro && (
-                      <Tooltip tooltipContent="Pro feature" position="top">
-                        <UpgradeBadge className="rounded-sm" />
-                      </Tooltip>
-                    )}
                   </span>
                 }
                 description={t(`${featureItem.key}_description`)}

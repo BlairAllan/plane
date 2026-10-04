@@ -4,6 +4,5 @@
  * See the LICENSE file for details.
  */
 
-export * from "./product-updates";
 
 export * from "./timezone-select";

@@ -12,7 +12,6 @@ import { useOutsideClickDetector } from "@plane/hooks";
 import { useTheme } from "@/hooks/store";
 // components
 import { AdminSidebarDropdown } from "./sidebar-dropdown";
-import { AdminSidebarHelpSection } from "./sidebar-help-section";
 import { AdminSidebarMenu } from "./sidebar-menu";
 
 export const AdminSidebar = observer(function AdminSidebar() {
@@ -49,7 +48,6 @@ export const AdminSidebar = observer(function AdminSidebar() {
       <div ref={ref} className="flex h-full w-full flex-1 flex-col">
         <AdminSidebarDropdown />
         <AdminSidebarMenu />
-        <AdminSidebarHelpSection />
       </div>
     </div>
   );
