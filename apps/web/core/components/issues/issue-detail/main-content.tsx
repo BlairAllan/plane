@@ -24,6 +24,7 @@ import useSize from "@/hooks/use-window-size";
 // services
 import { WorkItemVersionService } from "@/services/issue";
 // local imports
+import { FactoryActions } from "./factory-actions";
 import { IssueDetailWidgets } from "../issue-detail-widgets";
 import { NameDescriptionUpdateStatus } from "../issue-update-status";
 import { PeekOverviewProperties } from "../peek-overview/properties";
@@ -180,6 +181,8 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
           disabled={!isEditable || isArchived}
         />
       )}
+
+      <FactoryActions workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} />
 
       <IssueActivity workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} disabled={isArchived} />
     </>

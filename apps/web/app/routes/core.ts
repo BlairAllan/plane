@@ -336,6 +336,11 @@ export const coreRoutes: RouteConfigEntry[] = [
                 "./(all)/[workspaceSlug]/(settings)/settings/projects/[projectId]/automations/page.tsx"
               ),
             ]),
+            // Project Factory
+            route(
+              ":workspaceSlug/settings/projects/:projectId/factory",
+              "./(all)/[workspaceSlug]/(settings)/settings/projects/[projectId]/factory/page.tsx"
+            ),
           ]),
         ]),
       ]),

@@ -176,6 +176,11 @@
       "current": "Current estimate system",
       "select": "Select an estimate system"
     },
+    "factory": {
+      "label": "Factory",
+      "heading": "Software factory",
+      "description": "Agents pick up work items labelled agent that sit in Todo, work in the repositories below, open pull requests and move the item to In Review and Done."
+    },
     "automations": {
       "label": "Automations",
       "heading": "Automations",
