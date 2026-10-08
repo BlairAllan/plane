@@ -41,6 +41,19 @@ const writeRepos = (description: string | undefined, repos: string): string => {
   return rest.join("\n").trim();
 };
 
+type Stats = {
+  merged: number;
+  opened: number;
+  needs_you: number;
+  total_cost: number;
+  autonomy: number | null;
+  cycle_minutes: number | null;
+  cost_per_merged: number | null;
+};
+
+// `factory up` serves this read-only summary on the same machine.
+const STATS_URL = "http://127.0.0.1:8089/board.json";
+
 function FactorySettingsPage({ params }: Route.ComponentProps) {
   const { workspaceSlug, projectId } = params;
   const { workspaceUserInfo, allowPermissions } = useUserPermissions();
@@ -48,6 +61,15 @@ function FactorySettingsPage({ params }: Route.ComponentProps) {
   const { t } = useTranslation();
   const [repos, setRepos] = useState("");
   const [saving, setSaving] = useState(false);
+
+  const [stats, setStats] = useState<Stats | null>(null);
+
+  useEffect(() => {
+    fetch(STATS_URL)
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setStats)
+      .catch(() => setStats(null));
+  }, []);
 
   const isAdmin = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.PROJECT);
 
@@ -77,6 +99,23 @@ function FactorySettingsPage({ params }: Route.ComponentProps) {
           title={t("project_settings.factory.heading")}
           description={t("project_settings.factory.description")}
         />
+        {stats && (
+          <div className="mt-6 grid max-w-xl grid-cols-3 gap-2">
+            {[
+              ["Need you", String(stats.needs_you)],
+              ["Merged / PRs", `${stats.merged} / ${stats.opened}`],
+              ["Autonomy", stats.autonomy === null ? "-" : `${stats.autonomy}%`],
+              ["Cycle time", stats.cycle_minutes === null ? "-" : `${stats.cycle_minutes} min`],
+              ["Cost / merged PR", stats.cost_per_merged === null ? "-" : `$${stats.cost_per_merged}`],
+              ["Total cost", `$${stats.total_cost}`],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-lg border border-subtle bg-layer-1 p-3">
+                <div className="text-12 text-tertiary">{label}</div>
+                <div className="text-16 font-medium text-primary">{value}</div>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="mt-6 flex flex-col gap-2 max-w-xl">
           <label className="text-13 font-medium text-secondary" htmlFor="factory-repos">
             Repositories
