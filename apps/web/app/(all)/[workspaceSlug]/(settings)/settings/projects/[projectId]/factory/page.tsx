@@ -63,6 +63,7 @@ type Infra = {
   repo_skills: boolean;
   snapshots: { store: string; items: { name: string; commit: string; note?: string }[] };
   mcp: string;
+  boards: Record<string, { ts: number; role: string; ref?: string; text: string }[]>;
 };
 
 function FactorySettingsPage({ params }: Route.ComponentProps) {
@@ -212,6 +213,27 @@ function FactorySettingsPage({ params }: Route.ComponentProps) {
                   <div className="break-all text-14 font-medium text-primary">{value}</div>
                 </div>
               ))}
+            </div>
+            <div className="rounded-lg border border-subtle bg-layer-1 p-3 text-12 text-primary">
+              <div className="mb-2 text-tertiary">
+                Message board for this project: how its agents talk to each other. Add the label &quot;epic&quot; to a work item
+                to give the factory a goal; it plans the tasks itself.
+              </div>
+              {(infra.boards?.[projectId] ?? []).length === 0 ? (
+                <div className="text-tertiary">Nothing posted yet.</div>
+              ) : (
+                (infra.boards?.[projectId] ?? [])
+                  .slice(-15)
+                  .reverse()
+                  .map((m, i) => (
+                    <div key={i} className="border-t border-subtle py-1 first:border-t-0">
+                      <span className="text-tertiary">
+                        {m.ref || ""} {m.role}:{" "}
+                      </span>
+                      <span className="whitespace-pre-wrap">{m.text}</span>
+                    </div>
+                  ))
+              )}
             </div>
             <div className="rounded-lg border border-subtle bg-layer-1 p-3 text-12">
               <div className="mb-1 text-tertiary">Connect a local agent so it can pull work from this factory</div>
