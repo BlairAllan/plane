@@ -53,6 +53,17 @@ type Stats = {
 
 // `factory up` serves this read-only summary on the same machine.
 const STATS_URL = "http://127.0.0.1:8089/board.json";
+const INFRA_URL = "http://127.0.0.1:8089/factory.json";
+
+type Infra = {
+  models: { id: string; tier: string; runner: string; input_per_mtok: number; output_per_mtok: number }[];
+  tiers: Record<string, string>;
+  backend: string;
+  roles: { role: string; name: string; email: string; own_token: boolean }[];
+  repo_skills: boolean;
+  snapshots: { store: string; items: { name: string; commit: string; note?: string }[] };
+  mcp: string;
+};
 
 function FactorySettingsPage({ params }: Route.ComponentProps) {
   const { workspaceSlug, projectId } = params;
@@ -69,6 +80,15 @@ function FactorySettingsPage({ params }: Route.ComponentProps) {
       .then((r) => (r.ok ? r.json() : null))
       .then(setStats)
       .catch(() => setStats(null));
+  }, []);
+
+  const [infra, setInfra] = useState<Infra | null>(null);
+
+  useEffect(() => {
+    fetch(INFRA_URL)
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setInfra)
+      .catch(() => setInfra(null));
   }, []);
 
   const isAdmin = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.PROJECT);
@@ -139,6 +159,66 @@ function FactorySettingsPage({ params }: Route.ComponentProps) {
             </Button>
           </div>
         </div>
+        {infra && (
+          <div className="mt-8 flex max-w-xl flex-col gap-4">
+            <div className="text-13 font-medium text-secondary">Agents &amp; infrastructure</div>
+            <div className="rounded-lg border border-subtle bg-layer-1 p-3">
+              <div className="mb-2 text-12 text-tertiary">Model catalogue (USD per million tokens)</div>
+              {infra.models.length === 0 ? (
+                <div className="text-12 text-tertiary">
+                  No models.yaml yet. Copy models.yaml.example to add prices and tiers.
+                </div>
+              ) : (
+                <table className="w-full text-12 text-primary">
+                  <tbody>
+                    {infra.models.map((m) => (
+                      <tr key={m.id}>
+                        <td className="py-0.5">{m.id}</td>
+                        <td className="text-tertiary">{m.tier}</td>
+                        <td className="text-right">
+                          ${m.input_per_mtok} in / ${m.output_per_mtok} out
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {Object.keys(infra.tiers).length > 0 && (
+                <div className="mt-2 text-12 text-tertiary">
+                  {Object.entries(infra.tiers)
+                    .map(([tier, id]) => `tier:${tier} → ${id}`)
+                    .join("  ·  ")}
+                </div>
+              )}
+            </div>
+            <div className="rounded-lg border border-subtle bg-layer-1 p-3 text-12 text-primary">
+              <div className="mb-2 text-tertiary">Agent identities (commits and PRs are attributed per role)</div>
+              {infra.roles.map((r) => (
+                <div key={r.role} className="flex justify-between py-0.5">
+                  <span>{r.name}</span>
+                  <span className="text-tertiary">{r.own_token ? "own GitHub token" : "shared token"}</span>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-12">
+              {[
+                ["Worker backend", infra.backend],
+                ["Skills in the repo", infra.repo_skills ? "on" : "off"],
+                ["Snapshot store", infra.snapshots.store || "not set"],
+                ["Saved snapshots", String(infra.snapshots.items.length)],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-lg border border-subtle bg-layer-1 p-3">
+                  <div className="text-tertiary">{label}</div>
+                  <div className="break-all text-14 font-medium text-primary">{value}</div>
+                </div>
+              ))}
+            </div>
+            <div className="rounded-lg border border-subtle bg-layer-1 p-3 text-12">
+              <div className="mb-1 text-tertiary">Connect a local agent so it can pull work from this factory</div>
+              <code className="break-all text-primary">{infra.mcp}</code>
+            </div>
+          </div>
+        )}
       </section>
     </SettingsContentWrapper>
   );
