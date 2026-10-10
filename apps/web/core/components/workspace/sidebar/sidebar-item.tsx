@@ -49,6 +49,7 @@ export const SidebarItemBase = observer(function SidebarItemBase({
 
   const staticItems = [
     "home",
+    "agents",
     "pi_chat",
     "projects",
     "your_work",
@@ -72,7 +73,7 @@ export const SidebarItemBase = observer(function SidebarItemBase({
       <SidebarNavItem isActive={item.highlight(pathname, itemHref)}>
         <div className="flex items-center gap-1.5 py-[1px]">
           {icon}
-          <p className="text-13 leading-5 font-medium">{t(item.labelTranslationKey)}</p>
+          <p className="text-13 leading-5 font-medium">{item.key === "agents" ? "Agents" : t(item.labelTranslationKey)}</p>
         </div>
         {additionalRender?.(item.key, slug)}
       </SidebarNavItem>
