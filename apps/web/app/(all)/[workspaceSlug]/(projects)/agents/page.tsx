@@ -9,6 +9,7 @@ import { observer } from "mobx-react";
 import { Link } from "react-router";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import { LiveOutput } from "@/components/agents/live-output";
 import { PageHead } from "@/components/core/page-title";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectState } from "@/hooks/store/use-project-state";
@@ -180,6 +181,9 @@ function RunRow({
       <span className="w-24 shrink-0 truncate"><Chip>{run.project}</Chip></span>
       <span className="hidden w-24 shrink-0 2xl:block"><Chip title="source">{run.is_epic ? "epic" : run.parent_id ? "epic task" : "work item"}</Chip></span>
       <StatusChip status={status} />
+      <span className="w-2 shrink-0" title={status === "Active" && !run.is_epic ? "live output" : undefined}>
+        {status === "Active" && !run.is_epic && <span className="inline-block size-1.5 animate-pulse rounded-full bg-green-500" />}
+      </span>
       <span className="hidden w-14 shrink-0 text-right font-mono text-12 text-tertiary 2xl:block">
         {run.rounds ? `${run.rounds} rd` : ""}
       </span>
@@ -351,6 +355,12 @@ function DetailPane({
             </Link>
           )}
         </div>
+
+        <LiveOutput
+          project={run.project}
+          seq={seqOf(run.ref)}
+          polling={status === "Active" || status === "Ready for review" || run.plane_state === "In Progress" || run.plane_state === "In Review"}
+        />
 
         {run.error && (
           <section>
