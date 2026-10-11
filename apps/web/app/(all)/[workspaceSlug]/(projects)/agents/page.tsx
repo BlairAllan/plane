@@ -9,15 +9,15 @@ import { observer } from "mobx-react";
 import { Link } from "react-router";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import { BoardConnection } from "@/components/agents/board-connection";
 import { LiveOutput } from "@/components/agents/live-output";
 import { PageHead } from "@/components/core/page-title";
+import { boardConfigured, boardFetch, boardUrl } from "@/lib/c-swarm-board";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { IssueCommentService, IssueLabelService, IssueService } from "@/services/issue";
 import type { Route } from "./+types/page";
 
-const RUNS_URL = "http://127.0.0.1:8089/runs.json";
-const INFRA_URL = "http://127.0.0.1:8089/factory.json";
 
 type Finding = { round: number; judge: string; text: string; state: string };
 type Run = {
@@ -653,10 +653,13 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
   const [selected, setSelected] = useState<string | null>(null);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [dialog, setDialog] = useState(false);
+  const [connOpen, setConnOpen] = useState(false);
+  const [unauthorized, setUnauthorized] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [r, i] = await Promise.all([fetch(RUNS_URL), fetch(INFRA_URL)]);
+      const [r, i] = await Promise.all([boardFetch("/runs.json"), boardFetch("/factory.json")]);
+      setUnauthorized(r.status === 401 || r.status === 403 || r.status === 404);
       if (!r.ok) throw new Error("runs");
       const fresh: RunsResponse = await r.json();
       setData(fresh);
@@ -800,11 +803,24 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
                 {data.cap === 0 && <span className="text-tertiary">(no cap)</span>}
               </span>
             )}
+            <BoardConnection open={connOpen} onOpenChange={setConnOpen} onChanged={() => void load()} />
             <Button variant="primary" size="sm" onClick={() => setDialog(true)}>
               New run
             </Button>
           </div>
 
+          {offline && (
+            <div className="flex items-center justify-between gap-3 border-b border-subtle bg-red-500/10 px-4 py-2 text-12 text-red-400">
+              <span>
+                {unauthorized
+                  ? "The factory board refused this browser (check the token)."
+                  : `The factory board is not reachable at ${boardUrl()}.`}
+              </span>
+              <button type="button" className="underline" onClick={() => setConnOpen(true)}>
+                Configure
+              </button>
+            </div>
+          )}
           {notice && (
             <div className="flex items-center justify-between gap-3 border-b border-subtle bg-green-500/10 px-4 py-2 text-12 text-green-400">
               <span>{notice}</span>
@@ -831,7 +847,13 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
           <div className="flex-1 overflow-y-auto">
             {offline && (
               <div className="p-6 text-13 text-tertiary">
-                The factory is not reachable at 127.0.0.1:8089. Start it with <span className="font-mono">factory up</span>.
+                {boardConfigured() ? (
+                  <>The factory board is not reachable. Use the gear icon above to check its URL and token.</>
+                ) : (
+                  <>
+                    The factory is not reachable at {boardUrl()}. Start it with <span className="font-mono">factory up</span>.
+                  </>
+                )}
               </div>
             )}
             {!offline && data && rows.length === 0 && (

@@ -23,6 +23,7 @@ import { useUserPermissions } from "@/hooks/store/user";
 import type { Route } from "./+types/page";
 import { FactoryProjectSettingsHeader } from "./header";
 
+import { boardFetch } from "@/lib/c-swarm-board";
 // The factory reads `Repos:` lines from the project description.
 const REPOS_LINE = /^\s*repos?\s*:/i;
 
@@ -52,8 +53,8 @@ type Stats = {
 };
 
 // `factory up` serves this read-only summary on the same machine.
-const STATS_URL = "http://127.0.0.1:8089/board.json";
-const INFRA_URL = "http://127.0.0.1:8089/factory.json";
+const STATS_PATH = "/board.json";
+const INFRA_PATH = "/factory.json";
 
 type Infra = {
   models: { id: string; tier: string; runner: string; input_per_mtok: number; output_per_mtok: number }[];
@@ -77,7 +78,7 @@ function FactorySettingsPage({ params }: Route.ComponentProps) {
   const [stats, setStats] = useState<Stats | null>(null);
 
   useEffect(() => {
-    fetch(STATS_URL)
+    boardFetch(STATS_PATH)
       .then((r) => (r.ok ? r.json() : null))
       .then(setStats)
       .catch(() => setStats(null));
@@ -86,7 +87,7 @@ function FactorySettingsPage({ params }: Route.ComponentProps) {
   const [infra, setInfra] = useState<Infra | null>(null);
 
   useEffect(() => {
-    fetch(INFRA_URL)
+    boardFetch(INFRA_PATH)
       .then((r) => (r.ok ? r.json() : null))
       .then(setInfra)
       .catch(() => setInfra(null));

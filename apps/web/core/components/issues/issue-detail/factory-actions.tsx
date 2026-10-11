@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import { boardFetch } from "@/lib/c-swarm-board";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProjectState } from "@/hooks/store/use-project-state";
 
@@ -33,7 +34,7 @@ export const FactoryActions = observer(function FactoryActions({ workspaceSlug, 
 
   useEffect(() => {
     if (seq === undefined) return;
-    fetch("http://127.0.0.1:8089/factory.json")
+    boardFetch("/factory.json")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setNotes(d?.notes?.[`${projectId}:${seq}`] ?? []))
       .catch(() => setNotes([]));

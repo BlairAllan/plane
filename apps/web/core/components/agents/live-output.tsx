@@ -5,9 +5,9 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { boardEventSourceUrl, boardFetch } from "@/lib/c-swarm-board";
 
 // Live view of what a factory agent is doing: its stdout/stderr, streamed from the board server.
-const BOARD = "http://127.0.0.1:8089";
 const MAX_RECORDS = 5000;
 const RESULT_LINES = 12;
 
@@ -200,7 +200,7 @@ export function LiveOutput({ project, seq, polling }: { project: string; seq: st
   const picked = useRef(false);
   const box = useRef<HTMLDivElement | null>(null);
 
-  const base = `${BOARD}/runs/${encodeURIComponent(project)}/${encodeURIComponent(seq)}`;
+  const path = `/runs/${encodeURIComponent(project)}/${encodeURIComponent(seq)}`;
 
   // The pane is reused when another run is selected: start clean.
   useEffect(() => {
@@ -222,7 +222,7 @@ export function LiveOutput({ project, seq, polling }: { project: string; seq: st
     let alive = true;
     const load = async () => {
       try {
-        const r = await fetch(`${base}/streams.json`, { cache: "no-store" });
+        const r = await boardFetch(`${path}/streams.json`, { cache: "no-store" });
         if (!r.ok) throw new Error(String(r.status));
         const j = (await r.json()) as { streams: Stream[] };
         if (!alive) return;
@@ -239,7 +239,7 @@ export function LiveOutput({ project, seq, polling }: { project: string; seq: st
       alive = false;
       clearInterval(id);
     };
-  }, [open, polling, base]);
+  }, [open, polling, path]);
 
   const ordered = useMemo(() => {
     const rank = (s: Stream) => (s.state === "running" ? 0 : 1);
@@ -277,7 +277,7 @@ export function LiveOutput({ project, seq, polling }: { project: string; seq: st
     }, 150);
     const connect = () => {
       if (closed) return;
-      es = new EventSource(`${base}/stream?file=${encodeURIComponent(file)}&offset=${offset}`);
+      es = new EventSource(boardEventSourceUrl(`${path}/stream?file=${encodeURIComponent(file)}&offset=${offset}`));
       es.onmessage = (m) => {
         try {
           const rec = JSON.parse(m.data as string) as Rec;
@@ -304,7 +304,7 @@ export function LiveOutput({ project, seq, polling }: { project: string; seq: st
       if (retry) clearTimeout(retry);
       clearInterval(flush);
     };
-  }, [open, file, base]);
+  }, [open, file, path]);
 
   // Stick to the tail while following.
   useEffect(() => {
