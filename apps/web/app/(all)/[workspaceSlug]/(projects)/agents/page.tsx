@@ -510,12 +510,14 @@ const LAST_PROJECT_KEY = "agents:last-project";
 
 function NewRunDialog({
   workspaceSlug,
+  recentProjectId,
   onClose,
   onCreated,
 }: {
   workspaceSlug: string;
+  recentProjectId: string;
   onClose: () => void;
-  onCreated: () => void;
+  onCreated: (projectName: string) => void;
 }) {
   const { joinedProjectIds, getProjectById } = useProject();
   const { fetchProjectStates } = useProjectState();
@@ -526,14 +528,26 @@ function NewRunDialog({
     } catch {
       /* storage unavailable */
     }
+    if (recentProjectId && joinedProjectIds.includes(recentProjectId)) return recentProjectId;
     return joinedProjectIds[0] ?? "";
   });
   const [goal, setGoal] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const remember = (id: string) => {
+    try {
+      localStorage.setItem(LAST_PROJECT_KEY, id);
+    } catch {
+      /* storage unavailable */
+    }
+  };
 
   const submit = async () => {
     if (!projectId || !goal.trim()) return;
     setBusy(true);
+    setError("");
+    remember(projectId);
     try {
       const labels = new IssueLabelService();
       const existing = await labels.getProjectLabels(workspaceSlug, projectId);
@@ -549,20 +563,17 @@ function NewRunDialog({
         label_ids: [label.id],
         ...(todo ? { state_id: todo.id } : {}),
       });
-      try {
-        localStorage.setItem(LAST_PROJECT_KEY, projectId);
-      } catch {
-        /* storage unavailable */
-      }
+      const name = getProjectById(projectId)?.name ?? "the project";
       setToast({
         type: TOAST_TYPE.SUCCESS,
-        title: `Run started in ${getProjectById(projectId)?.name ?? "the project"}`,
+        title: `Run started in ${name}`,
         message: "The planner will break it into tasks; they appear here within a minute.",
       });
-      onCreated();
+      onCreated(name);
       onClose();
     } catch (e) {
       const detail = (e as { error?: string; detail?: string })?.error ?? (e as { detail?: string })?.detail ?? "";
+      setError(detail || "Plane rejected the goal. Check the project and try again.");
       setToast({
         type: TOAST_TYPE.ERROR,
         title: "Could not create the goal",
@@ -583,7 +594,10 @@ function NewRunDialog({
         <label className="mb-1 block text-12 text-tertiary">Project</label>
         <select
           value={projectId}
-          onChange={(e) => setProjectId(e.target.value)}
+          onChange={(e) => {
+            setProjectId(e.target.value);
+            remember(e.target.value);
+          }}
           className="mb-3 w-full rounded border border-subtle bg-layer-1 p-2 text-13 text-primary"
         >
           {joinedProjectIds.map((id) => (
@@ -601,12 +615,13 @@ function NewRunDialog({
           placeholder="Describe what to build. The factory plans it into dependent tasks, builds, reviews and merges them."
           className="w-full rounded border border-subtle bg-layer-1 p-2 text-13 text-primary outline-none focus:border-accent-strong"
         />
+        {error && <div className="mt-2 rounded bg-red-500/10 p-2 text-12 text-red-400">{error}</div>}
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="secondary" size="sm" onClick={onClose}>
             Cancel
           </Button>
           <Button variant="primary" size="sm" onClick={submit} disabled={busy || !goal.trim() || !projectId}>
-            Start
+            {busy ? "Starting…" : "Start"}
           </Button>
         </div>
       </div>
@@ -616,7 +631,8 @@ function NewRunDialog({
 
 const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps) {
   const { workspaceSlug } = params;
-  const { getProjectById } = useProject();
+  const { getProjectById, joinedProjectIds } = useProject();
+  const [notice, setNotice] = useState("");
   const [data, setData] = useState<RunsResponse | null>(null);
   const [overrides, setOverrides] = useState<Record<string, Partial<Run>>>({});
   const [infra, setInfra] = useState<Infra | null>(null);
@@ -681,6 +697,17 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
     },
     [tab, project, query]
   );
+
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(""), 10000);
+    return () => clearTimeout(t);
+  }, [notice]);
+
+  const recentProjectId = useMemo(() => {
+    const newest = [...runs].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).find((r) => joinedProjectIds.includes(r.project_id));
+    return newest?.project_id ?? "";
+  }, [runs, joinedProjectIds]);
 
   const known = useMemo(() => new Set(runs.map((r) => r.id)), [runs]);
   const visibleRoots = runs
@@ -768,6 +795,14 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
             </Button>
           </div>
 
+          {notice && (
+            <div className="flex items-center justify-between gap-3 border-b border-subtle bg-green-500/10 px-4 py-2 text-12 text-green-400">
+              <span>{notice}</span>
+              <button type="button" className="text-green-400/70 hover:text-green-400" onClick={() => setNotice("")}>
+                ✕
+              </button>
+            </div>
+          )}
           <div className="flex items-center gap-1 border-b border-subtle px-4 py-1.5">
             {TABS.map((t) => (
               <button
@@ -816,7 +851,18 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
           />
         )}
       </div>
-      {dialog && <NewRunDialog workspaceSlug={workspaceSlug} onClose={() => setDialog(false)} onCreated={() => void load()} />}
+      {dialog && (
+        <NewRunDialog
+          workspaceSlug={workspaceSlug}
+          recentProjectId={recentProjectId}
+          onClose={() => setDialog(false)}
+          onCreated={(name) => {
+            setNotice(`Run started in ${name}. The planner is breaking it into tasks; they appear below within a minute.`);
+            void load();
+            setTimeout(() => void load(), 15000);
+          }}
+        />
+      )}
     </>
   );
 });
