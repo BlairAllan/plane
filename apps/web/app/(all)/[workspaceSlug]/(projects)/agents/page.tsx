@@ -42,6 +42,7 @@ type Run = {
   branch: string;
   human_answered: boolean;
   plane_state: string;
+  question?: string;
 };
 type RunsResponse = { runs: Run[]; spent: number; cap: number };
 type Post = { ts: number; role: string; ref?: string; text: string };
@@ -168,9 +169,12 @@ function RunRow({
       {run.is_epic && kids.length > 0 && (
         <span className="hidden w-36 shrink-0 items-center gap-2 text-11 text-tertiary xl:flex">
           <span className="h-1.5 flex-1 overflow-hidden rounded bg-layer-2">
-            <span className="block h-full bg-green-500" style={{ width: `${(done / kids.length) * 100}%` }} />
+            <span
+              className="block h-full bg-green-500"
+              style={{ width: `${status === "Merged" ? 100 : (done / kids.length) * 100}%` }}
+            />
           </span>
-          {done}/{kids.length} merged
+          {status === "Merged" ? kids.length : done}/{kids.length} merged
         </span>
       )}
       <span className="w-24 shrink-0 truncate"><Chip>{run.project}</Chip></span>
@@ -226,6 +230,7 @@ function DetailPane({
   identifier,
   onClose,
   onChanged,
+  onOptimistic,
 }: {
   run: Run;
   workspaceSlug: string;
@@ -233,6 +238,7 @@ function DetailPane({
   identifier: string;
   onClose: () => void;
   onChanged: () => void;
+  onOptimistic: (patch: Partial<Run> | null) => void;
 }) {
   const { fetchProjectStates } = useProjectState();
   const [note, setNote] = useState("");
@@ -263,6 +269,11 @@ function DetailPane({
 
   const moveTo = async (stateName: string, withComment: string) => {
     setActing(true);
+    onOptimistic(
+      stateName === "Cancelled"
+        ? { plane_state: "Cancelled", bucket: "Idle", phase: "cancelled", error: "", question: "" }
+        : { plane_state: "Todo", bucket: "Waiting", phase: "queued", error: "", question: "" }
+    );
     try {
       const states = await fetchProjectStates(workspaceSlug, run.project_id);
       const target = states?.find((x) => x.name.toLowerCase() === stateName.toLowerCase());
@@ -281,6 +292,7 @@ function DetailPane({
       });
       onChanged();
     } catch {
+      onOptimistic(null);
       setToast({ type: TOAST_TYPE.ERROR, title: "Action failed", message: "Plane rejected the change." });
     } finally {
       setActing(false);
@@ -406,6 +418,11 @@ function DetailPane({
             <h4 className="mb-1 text-12 font-semibold text-tertiary uppercase">
               {needsAnswer ? "The factory is asking" : "Actions"}
             </h4>
+            {needsAnswer && run.question && (
+              <div className="mb-2 max-h-64 overflow-y-auto rounded bg-layer-1 p-2 text-13 whitespace-pre-wrap text-primary">
+                {run.question}
+              </div>
+            )}
             {(showRetry || needsAnswer) && (
               <textarea
                 value={note}
@@ -601,6 +618,7 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
   const { workspaceSlug } = params;
   const { getProjectById } = useProject();
   const [data, setData] = useState<RunsResponse | null>(null);
+  const [overrides, setOverrides] = useState<Record<string, Partial<Run>>>({});
   const [infra, setInfra] = useState<Infra | null>(null);
   const [offline, setOffline] = useState(false);
   const [tab, setTab] = useState<Tab>("All");
@@ -614,7 +632,17 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
     try {
       const [r, i] = await Promise.all([fetch(RUNS_URL), fetch(INFRA_URL)]);
       if (!r.ok) throw new Error("runs");
-      setData(await r.json());
+      const fresh: RunsResponse = await r.json();
+      setData(fresh);
+      // drop optimistic patches once the server reports the same Plane state
+      setOverrides((o) => {
+        const next: Record<string, Partial<Run>> = {};
+        for (const [id, patch] of Object.entries(o)) {
+          const live = fresh.runs.find((x) => x.id === id);
+          if (live && live.plane_state !== patch.plane_state) next[id] = patch;
+        }
+        return Object.keys(next).length === Object.keys(o).length ? o : next;
+      });
       if (i.ok) setInfra(await i.json());
       setOffline(false);
     } catch {
@@ -628,7 +656,10 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
     return () => clearInterval(t);
   }, [load]);
 
-  const runs = data?.runs ?? [];
+  const runs = useMemo(
+    () => (data?.runs ?? []).map((r) => (overrides[r.id] ? { ...r, ...overrides[r.id] } : r)),
+    [data, overrides]
+  );
   const projects = useMemo(() => Array.from(new Set(runs.map((r) => r.project))), [runs]);
   const children = useMemo(() => {
     const m: Record<string, Run[]> = {};
@@ -773,7 +804,15 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
             infra={infra}
             identifier={identifier}
             onClose={() => setSelected(null)}
-            onChanged={() => void load()}
+            onChanged={() => setTimeout(() => void load(), 4000)}
+            onOptimistic={(patch) =>
+              setOverrides((o) => {
+                const next = { ...o };
+                if (patch) next[sel.id] = patch;
+                else delete next[sel.id];
+                return next;
+              })
+            }
           />
         )}
       </div>
