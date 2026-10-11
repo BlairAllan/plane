@@ -47,11 +47,12 @@ type RunsResponse = { runs: Run[]; spent: number; cap: number };
 type Post = { ts: number; role: string; ref?: string; text: string };
 type Infra = { notes: Record<string, { ts: number; role: string; text: string }[]>; boards: Record<string, Post[]> };
 
-type Status = "Cancelled" | "Building" | "Active" | "Needs attention" | "Ready for review" | "Merged" | "Failed" | "Queued";
+type Status = "Blocked" | "Cancelled" | "Building" | "Active" | "Needs attention" | "Ready for review" | "Merged" | "Failed" | "Queued";
 
 const STATUS_STYLE: Record<Status, { color: string; pulse?: boolean }> = {
   Building: { color: "#3b82f6", pulse: true },
   Cancelled: { color: "#525252" },
+  Blocked: { color: "#ef4444" },
   Active: { color: "#3b82f6", pulse: true },
   "Needs attention": { color: "#f59e0b" },
   "Ready for review": { color: "#a855f7" },
@@ -74,6 +75,7 @@ const statusOf = (r: Run): Status => {
   if (r.merged) return "Merged";
   if (r.phase === "cancelled") return "Cancelled";
   if (r.phase === "failed" || r.phase === "crashed") return "Failed";
+  if (r.plane_state === "Blocked") return "Blocked";
   if (r.bucket === "Needs attention") return "Needs attention";
   if (r.bucket === "Active") return r.is_epic && r.phase === "building" ? "Building" : "Active";
   if (r.bucket === "Ready for review") return "Ready for review";
@@ -236,6 +238,11 @@ function DetailPane({
   const [note, setNote] = useState("");
   const [acting, setActing] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  useEffect(() => {
+    if (!confirmCancel) return;
+    const t = setTimeout(() => setConfirmCancel(false), 4000);
+    return () => clearTimeout(t);
+  }, [confirmCancel]);
   const [comment, setComment] = useState("");
   const [sending, setSending] = useState(false);
   const status = statusOf(run);
@@ -244,10 +251,15 @@ function DetailPane({
   const workItemHref = identifier ? `/${workspaceSlug}/browse/${identifier}-${seqOf(run.ref)}/` : "";
 
   const state = run.plane_state;
+  const retried = state === "Todo" && !run.merged && !run.is_epic && status !== "Merged";
   const canRetry =
-    !run.merged && !run.is_epic && (run.bucket === "Needs attention" || state === "Backlog" || state === "Cancelled");
+    !run.merged &&
+    !run.is_epic &&
+    (run.bucket === "Needs attention" || state === "Backlog" || state === "Cancelled" || state === "Blocked");
+  const showRetry = canRetry || retried;
   const needsAnswer = state === "Needs Direction";
   const canCancel = !run.merged && state !== "Done" && state !== "Cancelled";
+  const showBox = showRetry || needsAnswer || canCancel;
 
   const moveTo = async (stateName: string, withComment: string) => {
     setActing(true);
@@ -389,12 +401,12 @@ function DetailPane({
           )}
         </section>
 
-        {(canRetry || needsAnswer || canCancel) && (
+        {showBox && (
           <section className="rounded border border-subtle p-3">
             <h4 className="mb-1 text-12 font-semibold text-tertiary uppercase">
               {needsAnswer ? "The factory is asking" : "Actions"}
             </h4>
-            {(canRetry || needsAnswer) && (
+            {(showRetry || needsAnswer) && (
               <textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
@@ -403,40 +415,57 @@ function DetailPane({
                 className="w-full rounded border border-subtle bg-layer-1 p-2 text-13 text-primary outline-none focus:border-accent-strong"
               />
             )}
-            <div className="mt-2 flex justify-end gap-2">
-              {canCancel && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={acting}
-                  onClick={() => {
-                    if (!confirmCancel) {
-                      setConfirmCancel(true);
-                      return;
-                    }
-                    setConfirmCancel(false);
-                    void moveTo("Cancelled", "");
-                  }}
-                >
-                  {confirmCancel ? `Confirm: cancel ${run.ref}` : "Cancel run"}
-                </Button>
-              )}
-              {needsAnswer && (
-                <Button variant="primary" size="sm" disabled={acting || !note.trim()} onClick={() => moveTo("Todo", note)}>
-                  Send answer
-                </Button>
-              )}
-              {canRetry && (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  disabled={acting}
-                  onClick={() => moveTo("Todo", note.trim() ? `Retry: ${note.trim()}` : "")}
-                >
-                  {acting ? "Working…" : "Retry"}
-                </Button>
-              )}
-            </div>
+            {(showRetry || needsAnswer) && (
+              <div className="mt-2 flex h-8 items-center justify-end gap-2">
+                {needsAnswer && (
+                  <Button variant="primary" size="sm" disabled={acting || !note.trim()} onClick={() => moveTo("Todo", note)}>
+                    {acting ? "Working…" : "Send answer"}
+                  </Button>
+                )}
+                {showRetry && !needsAnswer && (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    disabled={acting || retried}
+                    onClick={() => moveTo("Todo", note.trim() ? `Retry: ${note.trim()}` : "")}
+                  >
+                    {acting ? "Working…" : retried ? "Queued" : "Retry"}
+                  </Button>
+                )}
+              </div>
+            )}
+            {canCancel && (
+              <div className="mt-3 flex h-7 items-center gap-3 border-t border-subtle pt-3 text-12">
+                {confirmCancel ? (
+                  <>
+                    <span className="text-tertiary">Cancel {run.ref}?</span>
+                    <button
+                      type="button"
+                      disabled={acting}
+                      className="text-red-400 hover:underline"
+                      onClick={() => {
+                        setConfirmCancel(false);
+                        void moveTo("Cancelled", "");
+                      }}
+                    >
+                      Yes, cancel it
+                    </button>
+                    <button type="button" className="text-tertiary hover:underline" onClick={() => setConfirmCancel(false)}>
+                      Keep
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={acting}
+                    className="text-tertiary hover:text-primary hover:underline"
+                    onClick={() => setConfirmCancel(true)}
+                  >
+                    Cancel run…
+                  </button>
+                )}
+              </div>
+            )}
           </section>
         )}
 
@@ -611,7 +640,7 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
   const matches = useCallback(
     (r: Run) => {
       const s = statusOf(r);
-      if (tab === "Needs attention" && s !== "Needs attention") return false;
+      if (tab === "Needs attention" && s !== "Needs attention" && s !== "Blocked") return false;
       if (tab === "Active" && s !== "Active" && s !== "Building") return false;
       if (tab === "Failed" && s !== "Failed") return false;
       if (tab === "Merged" && s !== "Merged") return false;
@@ -629,7 +658,10 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
 
   const counts = (t: Tab) =>
-    runs.filter((r) => t === "All" || statusOf(r) === t || (t === "Active" && statusOf(r) === "Building")).length;
+    runs.filter((r) => {
+      const s = statusOf(r);
+      return t === "All" || s === t || (t === "Active" && s === "Building") || (t === "Needs attention" && s === "Blocked");
+    }).length;
   const sel = runs.find((r) => r.id === selected) ?? null;
   const identifier = sel ? (getProjectById(sel.project_id)?.identifier ?? "") : "";
 
@@ -735,6 +767,7 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
 
         {sel && (
           <DetailPane
+            key={sel.id}
             run={sel}
             workspaceSlug={workspaceSlug}
             infra={infra}
