@@ -41,14 +41,17 @@ type Run = {
   merged: boolean;
   branch: string;
   human_answered: boolean;
+  plane_state: string;
 };
 type RunsResponse = { runs: Run[]; spent: number; cap: number };
 type Post = { ts: number; role: string; ref?: string; text: string };
 type Infra = { notes: Record<string, { ts: number; role: string; text: string }[]>; boards: Record<string, Post[]> };
 
-type Status = "Active" | "Needs attention" | "Ready for review" | "Merged" | "Failed" | "Queued";
+type Status = "Cancelled" | "Building" | "Active" | "Needs attention" | "Ready for review" | "Merged" | "Failed" | "Queued";
 
 const STATUS_STYLE: Record<Status, { color: string; pulse?: boolean }> = {
+  Building: { color: "#3b82f6", pulse: true },
+  Cancelled: { color: "#525252" },
   Active: { color: "#3b82f6", pulse: true },
   "Needs attention": { color: "#f59e0b" },
   "Ready for review": { color: "#a855f7" },
@@ -69,9 +72,10 @@ function Dot({ status }: { status: Status }) {
 
 const statusOf = (r: Run): Status => {
   if (r.merged) return "Merged";
+  if (r.phase === "cancelled") return "Cancelled";
   if (r.phase === "failed" || r.phase === "crashed") return "Failed";
   if (r.bucket === "Needs attention") return "Needs attention";
-  if (r.bucket === "Active") return "Active";
+  if (r.bucket === "Active") return r.is_epic && r.phase === "building" ? "Building" : "Active";
   if (r.bucket === "Ready for review") return "Ready for review";
   return "Queued";
 };
@@ -130,7 +134,9 @@ function RunRow({
   onToggle: () => void;
 }) {
   const status = statusOf(run);
-  const done = kids.filter((k) => k.merged).length;
+  const done = kids.filter((k) => k.merged || k.plane_state === "Done").length;
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   return (
     <div
       onClick={onSelect}
@@ -154,9 +160,11 @@ function RunRow({
         <span className="w-4" />
       )}
             <span className="w-12 shrink-0 font-mono text-12 text-tertiary">{run.ref}</span>
-      <span className="min-w-0 flex-1 truncate text-primary">{run.name}</span>
+      <span className="min-w-[14rem] flex-1 truncate text-primary" title={run.name}>
+        {run.name}
+      </span>
       {run.is_epic && kids.length > 0 && (
-        <span className="flex w-40 shrink-0 items-center gap-2 text-11 text-tertiary">
+        <span className="hidden w-36 shrink-0 items-center gap-2 text-11 text-tertiary xl:flex">
           <span className="h-1.5 flex-1 overflow-hidden rounded bg-layer-2">
             <span className="block h-full bg-green-500" style={{ width: `${(done / kids.length) * 100}%` }} />
           </span>
@@ -164,9 +172,9 @@ function RunRow({
         </span>
       )}
       <span className="w-24 shrink-0 truncate"><Chip>{run.project}</Chip></span>
-      <span className="w-24 shrink-0"><Chip title="source">{run.is_epic ? "epic" : run.parent_id ? "epic task" : "work item"}</Chip></span>
+      <span className="hidden w-24 shrink-0 2xl:block"><Chip title="source">{run.is_epic ? "epic" : run.parent_id ? "epic task" : "work item"}</Chip></span>
       <StatusChip status={status} />
-      <span className="w-14 shrink-0 text-right font-mono text-12 text-tertiary">
+      <span className="hidden w-14 shrink-0 text-right font-mono text-12 text-tertiary 2xl:block">
         {run.rounds ? `${run.rounds} rd` : ""}
       </span>
       <span className="w-14 shrink-0 text-right font-mono text-12 text-secondary">${run.cost.toFixed(2)}</span>
@@ -183,8 +191,29 @@ function RunRow({
       ) : (
         <span className="w-12 shrink-0" />
       )}
-      <span className="w-16 shrink-0 text-right text-12 text-tertiary">{ago(run.updated_at)}</span>
+      <span className="w-16 shrink-0 text-right text-12 text-tertiary" suppressHydrationWarning>
+        {mounted ? ago(run.updated_at) : ""}
+      </span>
     </div>
+  );
+}
+
+function Post({ p }: { p: { role: string; ref?: string; text: string } }) {
+  const [full, setFull] = useState(false);
+  const long = p.text.length > 220;
+  return (
+    <li className="rounded bg-layer-1 p-2">
+      <span className="font-mono text-11 text-tertiary">
+        {p.role}
+        {p.ref ? ` · ${p.ref}` : ""}
+      </span>
+      <div className={`whitespace-pre-wrap ${full ? "" : "line-clamp-4"}`}>{p.text}</div>
+      {long && (
+        <button type="button" onClick={() => setFull((f) => !f)} className="mt-1 text-11 text-accent-primary">
+          {full ? "Show less" : "Show more"}
+        </button>
+      )}
+    </li>
   );
 }
 
@@ -192,23 +221,59 @@ function DetailPane({
   run,
   workspaceSlug,
   infra,
-  singleProject,
   identifier,
   onClose,
+  onChanged,
 }: {
   run: Run;
   workspaceSlug: string;
   infra: Infra | null;
-  singleProject: boolean;
   identifier: string;
   onClose: () => void;
+  onChanged: () => void;
 }) {
+  const { fetchProjectStates } = useProjectState();
+  const [note, setNote] = useState("");
+  const [acting, setActing] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const [comment, setComment] = useState("");
   const [sending, setSending] = useState(false);
   const status = statusOf(run);
   const board = (infra?.boards?.[run.project_id] ?? []).slice(-12).reverse();
-  const notes = singleProject ? (infra?.notes?.[seqOf(run.ref)] ?? []) : [];
+  const notes = infra?.notes?.[`${run.project_id}:${seqOf(run.ref)}`] ?? [];
   const workItemHref = identifier ? `/${workspaceSlug}/browse/${identifier}-${seqOf(run.ref)}/` : "";
+
+  const state = run.plane_state;
+  const canRetry =
+    !run.merged && !run.is_epic && (run.bucket === "Needs attention" || state === "Backlog" || state === "Cancelled");
+  const needsAnswer = state === "Needs Direction";
+  const canCancel = !run.merged && state !== "Done" && state !== "Cancelled";
+
+  const moveTo = async (stateName: string, withComment: string) => {
+    setActing(true);
+    try {
+      const states = await fetchProjectStates(workspaceSlug, run.project_id);
+      const target = states?.find((x) => x.name.toLowerCase() === stateName.toLowerCase());
+      if (!target) throw new Error(`no ${stateName} state`);
+      if (withComment.trim()) {
+        await new IssueCommentService().createIssueComment(workspaceSlug, run.project_id, run.id, {
+          comment_html: `<p>${withComment.trim().replace(/</g, "&lt;")}</p>`,
+        });
+      }
+      await new IssueService().patchIssue(workspaceSlug, run.project_id, run.id, { state_id: target.id });
+      setNote("");
+      setToast({
+        type: TOAST_TYPE.SUCCESS,
+        title: stateName === "Cancelled" ? `${run.ref} cancelled` : `${run.ref} sent back to the factory`,
+        message: stateName === "Todo" ? "It is queued and will be picked up on the next poll." : undefined,
+      });
+      onChanged();
+    } catch {
+      setToast({ type: TOAST_TYPE.ERROR, title: "Action failed", message: "Plane rejected the change." });
+    } finally {
+      setActing(false);
+    }
+  };
 
   const send = async () => {
     if (!comment.trim()) return;
@@ -219,6 +284,7 @@ function DetailPane({
       });
       setComment("");
       setToast({ type: TOAST_TYPE.SUCCESS, title: "Comment added", message: "The factory reads it on its next poll." });
+      onChanged();
     } catch {
       setToast({ type: TOAST_TYPE.ERROR, title: "Could not comment", message: "Plane rejected the comment." });
     } finally {
@@ -317,17 +383,62 @@ function DetailPane({
           ) : (
             <ul className="flex flex-col gap-1">
               {board.map((p, i) => (
-                <li key={i} className="rounded bg-layer-1 p-2">
-                  <span className="font-mono text-11 text-tertiary">
-                    {p.role}
-                    {p.ref ? ` · ${p.ref}` : ""}
-                  </span>
-                  <div className="line-clamp-4 whitespace-pre-wrap">{p.text}</div>
-                </li>
+                <Post key={i} p={p} />
               ))}
             </ul>
           )}
         </section>
+
+        {(canRetry || needsAnswer || canCancel) && (
+          <section className="rounded border border-subtle p-3">
+            <h4 className="mb-1 text-12 font-semibold text-tertiary uppercase">
+              {needsAnswer ? "The factory is asking" : "Actions"}
+            </h4>
+            {(canRetry || needsAnswer) && (
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={3}
+                placeholder={needsAnswer ? "Your answer…" : "Optional guidance for the retry…"}
+                className="w-full rounded border border-subtle bg-layer-1 p-2 text-13 text-primary outline-none focus:border-accent-strong"
+              />
+            )}
+            <div className="mt-2 flex justify-end gap-2">
+              {canCancel && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={acting}
+                  onClick={() => {
+                    if (!confirmCancel) {
+                      setConfirmCancel(true);
+                      return;
+                    }
+                    setConfirmCancel(false);
+                    void moveTo("Cancelled", "");
+                  }}
+                >
+                  {confirmCancel ? `Confirm: cancel ${run.ref}` : "Cancel run"}
+                </Button>
+              )}
+              {needsAnswer && (
+                <Button variant="primary" size="sm" disabled={acting || !note.trim()} onClick={() => moveTo("Todo", note)}>
+                  Send answer
+                </Button>
+              )}
+              {canRetry && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={acting}
+                  onClick={() => moveTo("Todo", note.trim() ? `Retry: ${note.trim()}` : "")}
+                >
+                  {acting ? "Working…" : "Retry"}
+                </Button>
+              )}
+            </div>
+          </section>
+        )}
 
         <section>
           <h4 className="mb-1 text-12 font-semibold text-tertiary uppercase">Steer</h4>
@@ -349,16 +460,28 @@ function DetailPane({
   );
 }
 
+const LAST_PROJECT_KEY = "agents:last-project";
+
 function NewRunDialog({
   workspaceSlug,
   onClose,
+  onCreated,
 }: {
   workspaceSlug: string;
   onClose: () => void;
+  onCreated: () => void;
 }) {
   const { joinedProjectIds, getProjectById } = useProject();
   const { fetchProjectStates } = useProjectState();
-  const [projectId, setProjectId] = useState(joinedProjectIds[0] ?? "");
+  const [projectId, setProjectId] = useState(() => {
+    try {
+      const last = localStorage.getItem(LAST_PROJECT_KEY);
+      if (last && joinedProjectIds.includes(last)) return last;
+    } catch {
+      /* storage unavailable */
+    }
+    return joinedProjectIds[0] ?? "";
+  });
   const [goal, setGoal] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -380,10 +503,25 @@ function NewRunDialog({
         label_ids: [label.id],
         ...(todo ? { state_id: todo.id } : {}),
       });
-      setToast({ type: TOAST_TYPE.SUCCESS, title: "Goal sent", message: "The factory will plan it into tasks." });
+      try {
+        localStorage.setItem(LAST_PROJECT_KEY, projectId);
+      } catch {
+        /* storage unavailable */
+      }
+      setToast({
+        type: TOAST_TYPE.SUCCESS,
+        title: `Run started in ${getProjectById(projectId)?.name ?? "the project"}`,
+        message: "The planner will break it into tasks; they appear here within a minute.",
+      });
+      onCreated();
       onClose();
-    } catch {
-      setToast({ type: TOAST_TYPE.ERROR, title: "Could not create the goal", message: "Check the project and try again." });
+    } catch (e) {
+      const detail = (e as { error?: string; detail?: string })?.error ?? (e as { detail?: string })?.detail ?? "";
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: "Could not create the goal",
+        message: detail || "Check the project and try again.",
+      });
     } finally {
       setBusy(false);
     }
@@ -474,7 +612,7 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
     (r: Run) => {
       const s = statusOf(r);
       if (tab === "Needs attention" && s !== "Needs attention") return false;
-      if (tab === "Active" && s !== "Active") return false;
+      if (tab === "Active" && s !== "Active" && s !== "Building") return false;
       if (tab === "Failed" && s !== "Failed") return false;
       if (tab === "Merged" && s !== "Merged") return false;
       if (project && r.project !== project) return false;
@@ -491,7 +629,7 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
 
   const counts = (t: Tab) =>
-    runs.filter((r) => t === "All" || statusOf(r) === t).length;
+    runs.filter((r) => t === "All" || statusOf(r) === t || (t === "Active" && statusOf(r) === "Building")).length;
   const sel = runs.find((r) => r.id === selected) ?? null;
   const identifier = sel ? (getProjectById(sel.project_id)?.identifier ?? "") : "";
 
@@ -544,7 +682,7 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
             <div className="flex-1" />
             {data && (
               <span
-                className="flex items-center gap-2 rounded bg-layer-1 px-2 py-1 font-mono text-12 text-secondary"
+                className="flex items-center gap-2 rounded bg-layer-1 px-2 py-1 font-mono text-12 whitespace-nowrap text-secondary"
                 title="Total spend across runs vs the factory's cost cap"
               >
                 ${data.spent.toFixed(2)}
@@ -559,6 +697,7 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
                     / ${data.cap}
                   </>
                 )}
+                {data.cap === 0 && <span className="text-tertiary">(no cap)</span>}
               </span>
             )}
             <Button variant="primary" size="sm" onClick={() => setDialog(true)}>
@@ -599,13 +738,13 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
             run={sel}
             workspaceSlug={workspaceSlug}
             infra={infra}
-            singleProject={projects.length === 1}
             identifier={identifier}
             onClose={() => setSelected(null)}
+            onChanged={() => void load()}
           />
         )}
       </div>
-      {dialog && <NewRunDialog workspaceSlug={workspaceSlug} onClose={() => setDialog(false)} />}
+      {dialog && <NewRunDialog workspaceSlug={workspaceSlug} onClose={() => setDialog(false)} onCreated={() => void load()} />}
     </>
   );
 });

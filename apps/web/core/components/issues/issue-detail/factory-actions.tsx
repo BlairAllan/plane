@@ -35,9 +35,9 @@ export const FactoryActions = observer(function FactoryActions({ workspaceSlug, 
     if (seq === undefined) return;
     fetch("http://127.0.0.1:8089/factory.json")
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setNotes(d?.notes?.[String(seq)] ?? []))
+      .then((d) => setNotes(d?.notes?.[`${projectId}:${seq}`] ?? []))
       .catch(() => setNotes([]));
-  }, [seq]);
+  }, [seq, projectId]);
 
   const state = issue?.state_id ? getStateById(issue.state_id) : undefined;
   const waiting = state?.name === "Needs Direction";
