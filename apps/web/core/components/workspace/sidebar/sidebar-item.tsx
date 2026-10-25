@@ -19,6 +19,7 @@ import { SidebarNavItem } from "@/components/sidebar/sidebar-navigation";
 import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { useWorkspaceNavigationPreferences } from "@/hooks/use-navigation-preferences";
+import { AgentInboxBadge } from "@/components/agents/inbox/inbox-badge";
 // plane web imports
 import { getSidebarNavigationItemIcon } from "@/components/workspace/sidebar/helper";
 
@@ -49,6 +50,7 @@ export const SidebarItemBase = observer(function SidebarItemBase({
 
   const staticItems = [
     "home",
+    "agent_inbox",
     "agents",
     "pi_chat",
     "projects",
@@ -73,8 +75,15 @@ export const SidebarItemBase = observer(function SidebarItemBase({
       <SidebarNavItem isActive={item.highlight(pathname, itemHref)}>
         <div className="flex items-center gap-1.5 py-[1px]">
           {icon}
-          <p className="text-13 leading-5 font-medium">{item.key === "agents" ? "Agents" : t(item.labelTranslationKey)}</p>
+          <p className="text-13 leading-5 font-medium">
+            {item.key === "agents"
+              ? "Agents"
+              : item.key === "agent_inbox"
+                ? "Agent inbox"
+                : t(item.labelTranslationKey)}
+          </p>
         </div>
+        {item.key === "agent_inbox" && <AgentInboxBadge />}
         {additionalRender?.(item.key, slug)}
       </SidebarNavItem>
     </Link>

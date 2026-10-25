@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   DEFAULT_BOARD_URL,
   boardToken,
@@ -21,10 +21,13 @@ export function BoardConnection({
   open,
   onOpenChange,
   onChanged,
+  align = "right",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onChanged: () => void;
+  /** Which edge of the gear the panel lines up with; either way it is kept on screen. */
+  align?: "left" | "right";
 }) {
   const [url, setUrl] = useState(DEFAULT_BOARD_URL);
   const [token, setToken] = useState("");
@@ -32,6 +35,15 @@ export function BoardConnection({
   const [result, setResult] = useState<BoardTest | null>(null);
   const [testing, setTesting] = useState(false);
   const box = useRef<HTMLDivElement>(null);
+  // Placed against the viewport: the gear often sits in a scrolling column that would clip the panel.
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!open || !box.current) return;
+    const r = box.current.getBoundingClientRect();
+    const w = 320;
+    const left = align === "left" ? r.left : r.right - w;
+    setPos({ top: r.bottom + 4, left: Math.max(8, Math.min(left, window.innerWidth - w - 8)) });
+  }, [open, align]);
 
   useEffect(() => {
     if (!open) return;
@@ -80,7 +92,10 @@ export function BoardConnection({
         </svg>
       </button>
       {open && (
-        <div className="absolute right-0 z-30 mt-1 w-80 rounded border border-subtle bg-surface-1 p-3 shadow-lg">
+        <div
+          className="shadow-lg fixed z-50 w-80 max-w-[calc(100vw-16px)] rounded border border-subtle bg-surface-1 p-3"
+          style={pos ?? { visibility: "hidden" }}
+        >
           <div className="mb-2 text-13 font-medium text-primary">Board connection</div>
           <label className="mb-1 block text-11 text-tertiary" htmlFor="cswarm-board-url">
             Factory board URL
@@ -90,7 +105,7 @@ export function BoardConnection({
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             spellCheck={false}
-            className="mb-2 w-full rounded border border-subtle bg-layer-1 px-2 py-1 font-mono text-12 text-primary outline-none focus:border-accent-strong"
+            className="font-mono mb-2 w-full rounded border border-subtle bg-layer-1 px-2 py-1 text-12 text-primary outline-none focus:border-accent-strong"
           />
           <label className="mb-1 block text-11 text-tertiary" htmlFor="cswarm-board-token">
             Token {hint && <span className="font-mono">(saved: {hint})</span>}
@@ -102,10 +117,14 @@ export function BoardConnection({
             value={token}
             onChange={(e) => setToken(e.target.value)}
             placeholder={boardToken() ? "leave empty to keep the saved token" : "none (local board)"}
-            className="mb-2 w-full rounded border border-subtle bg-layer-1 px-2 py-1 font-mono text-12 text-primary outline-none focus:border-accent-strong"
+            className="font-mono mb-2 w-full rounded border border-subtle bg-layer-1 px-2 py-1 text-12 text-primary outline-none focus:border-accent-strong"
           />
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={save} className="rounded bg-accent-primary px-2.5 py-1 text-12 text-on-color">
+            <button
+              type="button"
+              onClick={save}
+              className="rounded bg-accent-primary px-2.5 py-1 text-12 text-on-color"
+            >
               Save
             </button>
             <button
@@ -144,7 +163,7 @@ export function BoardConnection({
             </button>
           </div>
           {result && (
-            <div className={`mt-2 text-12 ${result.ok ? "text-green-400" : "text-red-400"}`} role="status">
+            <div className={`mt-2 text-12 ${result.ok ? "text-success-primary" : "text-danger-primary"}`} role="status">
               {result.message}
             </div>
           )}

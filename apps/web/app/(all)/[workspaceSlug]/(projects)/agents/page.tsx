@@ -18,7 +18,6 @@ import { useProjectState } from "@/hooks/store/use-project-state";
 import { IssueCommentService, IssueLabelService, IssueService } from "@/services/issue";
 import type { Route } from "./+types/page";
 
-
 type Finding = { round: number; judge: string; text: string; state: string };
 type Run = {
   id: string;
@@ -49,7 +48,16 @@ type RunsResponse = { runs: Run[]; spent: number; cap: number };
 type Post = { ts: number; role: string; ref?: string; text: string };
 type Infra = { notes: Record<string, { ts: number; role: string; text: string }[]>; boards: Record<string, Post[]> };
 
-type Status = "Blocked" | "Cancelled" | "Building" | "Active" | "Needs attention" | "Ready for review" | "Merged" | "Failed" | "Queued";
+type Status =
+  | "Blocked"
+  | "Cancelled"
+  | "Building"
+  | "Active"
+  | "Needs attention"
+  | "Ready for review"
+  | "Merged"
+  | "Failed"
+  | "Queued";
 
 const STATUS_STYLE: Record<Status, { color: string; pulse?: boolean }> = {
   Building: { color: "#3b82f6", pulse: true },
@@ -114,7 +122,7 @@ function StatusChip({ status }: { status: Status }) {
 
 function Chip({ children, title }: { children: React.ReactNode; title?: string }) {
   return (
-    <span title={title} className="rounded bg-layer-1 px-1.5 py-0.5 font-mono text-11 text-tertiary">
+    <span title={title} className="font-mono rounded bg-layer-1 px-1.5 py-0.5 text-11 text-tertiary">
       {children}
     </span>
   );
@@ -143,7 +151,17 @@ function RunRow({
   useEffect(() => setMounted(true), []);
   return (
     <div
+      // a row, not a <button>: it holds the epic's expand button
+      // oxlint-disable-next-line jsx_a11y/prefer-tag-over-role
+      role="button"
+      tabIndex={0}
       onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
       className={`flex cursor-pointer items-center gap-3 border-b border-subtle px-4 py-2 text-13 hover:bg-layer-1 ${
         selected ? "bg-layer-1" : ""
       }`}
@@ -163,7 +181,7 @@ function RunRow({
       ) : (
         <span className="w-4" />
       )}
-            <span className="w-12 shrink-0 font-mono text-12 text-tertiary">{run.ref}</span>
+      <span className="font-mono w-12 shrink-0 text-12 text-tertiary">{run.ref}</span>
       <span className="min-w-[14rem] flex-1 truncate text-primary" title={run.name}>
         {run.name}
       </span>
@@ -171,30 +189,36 @@ function RunRow({
         <span className="hidden w-36 shrink-0 items-center gap-2 text-11 text-tertiary xl:flex">
           <span className="h-1.5 flex-1 overflow-hidden rounded bg-layer-2">
             <span
-              className="block h-full bg-green-500"
+              className="block h-full bg-success-primary"
               style={{ width: `${status === "Merged" ? 100 : (done / kids.length) * 100}%` }}
             />
           </span>
           {status === "Merged" ? kids.length : done}/{kids.length} merged
         </span>
       )}
-      <span className="w-24 shrink-0 truncate"><Chip>{run.project}</Chip></span>
-      <span className="hidden w-24 shrink-0 2xl:block"><Chip title="source">{run.is_epic ? "epic" : run.parent_id ? "epic task" : "work item"}</Chip></span>
+      <span className="w-24 shrink-0 truncate">
+        <Chip>{run.project}</Chip>
+      </span>
+      <span className="hidden w-24 shrink-0 2xl:block">
+        <Chip title="source">{run.is_epic ? "epic" : run.parent_id ? "epic task" : "work item"}</Chip>
+      </span>
       <StatusChip status={status} />
       <span className="w-2 shrink-0" title={status === "Active" && !run.is_epic ? "live output" : undefined}>
-        {status === "Active" && !run.is_epic && <span className="inline-block size-1.5 animate-pulse rounded-full bg-green-500" />}
+        {status === "Active" && !run.is_epic && (
+          <span className="inline-block size-1.5 animate-pulse rounded-full bg-success-primary" />
+        )}
       </span>
-      <span className="hidden w-14 shrink-0 text-right font-mono text-12 text-tertiary 2xl:block">
+      <span className="font-mono hidden w-14 shrink-0 text-right text-12 text-tertiary 2xl:block">
         {run.rounds ? `${run.rounds} rd` : ""}
       </span>
-      <span className="w-14 shrink-0 text-right font-mono text-12 text-secondary">${run.cost.toFixed(2)}</span>
+      <span className="font-mono w-14 shrink-0 text-right text-12 text-secondary">${run.cost.toFixed(2)}</span>
       {run.pr_url ? (
         <a
           href={run.pr_url}
           target="_blank"
           rel="noreferrer"
           onClick={(e) => e.stopPropagation()}
-          className="w-12 shrink-0 font-mono text-12 text-accent-primary hover:underline"
+          className="font-mono w-12 shrink-0 text-12 text-accent-primary hover:underline"
         >
           PR #{run.pr_number}
         </a>
@@ -256,7 +280,8 @@ function DetailPane({
   const [comment, setComment] = useState("");
   const [sending, setSending] = useState(false);
   const status = statusOf(run);
-  const board = (infra?.boards?.[run.project_id] ?? []).slice(-12).reverse();
+  const board = (infra?.boards?.[run.project_id] ?? []).slice(-12);
+  board.reverse(); // a copy from slice; newest first
   const notes = infra?.notes?.[`${run.project_id}:${seqOf(run.ref)}`] ?? [];
   const workItemHref = identifier ? `/${workspaceSlug}/browse/${identifier}-${seqOf(run.ref)}/` : "";
 
@@ -327,7 +352,7 @@ function DetailPane({
           <div className="font-mono text-12 text-tertiary">
             {run.project} · {run.ref}
           </div>
-          <div className="mt-1 text-15 font-semibold text-primary">{run.name}</div>
+          <div className="text-15 mt-1 font-semibold text-primary">{run.name}</div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <StatusChip status={status} />
             <Chip>{run.phase}</Chip>
@@ -348,7 +373,7 @@ function DetailPane({
               Pull request #{run.pr_number}
             </a>
           )}
-          {run.branch && <div className="truncate font-mono text-12 text-tertiary">{run.branch}</div>}
+          {run.branch && <div className="font-mono truncate text-12 text-tertiary">{run.branch}</div>}
           {workItemHref && (
             <Link to={workItemHref} className="text-accent-primary hover:underline">
               Open work item in Plane
@@ -359,13 +384,18 @@ function DetailPane({
         <LiveOutput
           project={run.project}
           seq={seqOf(run.ref)}
-          polling={status === "Active" || status === "Ready for review" || run.plane_state === "In Progress" || run.plane_state === "In Review"}
+          polling={
+            status === "Active" ||
+            status === "Ready for review" ||
+            run.plane_state === "In Progress" ||
+            run.plane_state === "In Review"
+          }
         />
 
         {run.error && (
           <section>
             <h4 className="mb-1 text-12 font-semibold text-tertiary uppercase">Needs attention</h4>
-            <pre className="rounded bg-amber-500/10 p-2 font-mono text-12 whitespace-pre-wrap text-amber-400">
+            <pre className="font-mono rounded bg-warning-subtle p-2 text-12 whitespace-pre-wrap text-warning-primary">
               {run.error}
             </pre>
           </section>
@@ -379,9 +409,9 @@ function DetailPane({
             <div className="text-tertiary">None.</div>
           ) : (
             <ul className="flex flex-col gap-1">
-              {run.findings.map((f, i) => (
-                <li key={i} className="flex gap-2 rounded bg-layer-1 p-2">
-                  <span className={f.state === "open" ? "text-amber-400" : "text-green-500"}>
+              {run.findings.map((f) => (
+                <li key={`${f.round}-${f.judge}-${f.text}`} className="flex gap-2 rounded bg-layer-1 p-2">
+                  <span className={f.state === "open" ? "text-warning-primary" : "text-success-primary"}>
                     {f.state === "open" ? "●" : "✓"}
                   </span>
                   <span className="flex-1">
@@ -401,8 +431,8 @@ function DetailPane({
           <section>
             <h4 className="mb-1 text-12 font-semibold text-tertiary uppercase">Agent notes</h4>
             <ul className="flex flex-col gap-1">
-              {notes.slice(-8).map((n, i) => (
-                <li key={i} className="rounded bg-layer-1 p-2">
+              {notes.slice(-8).map((n) => (
+                <li key={`${n.ts}-${n.role}`} className="rounded bg-layer-1 p-2">
                   <span className="font-mono text-11 text-tertiary">{n.role}</span> {n.text}
                 </li>
               ))}
@@ -416,8 +446,8 @@ function DetailPane({
             <div className="text-tertiary">No posts yet.</div>
           ) : (
             <ul className="flex flex-col gap-1">
-              {board.map((p, i) => (
-                <Post key={i} p={p} />
+              {board.map((p) => (
+                <Post key={`${p.ts}-${p.role}`} p={p} />
               ))}
             </ul>
           )}
@@ -445,7 +475,12 @@ function DetailPane({
             {(showRetry || needsAnswer) && (
               <div className="mt-2 flex h-8 items-center justify-end gap-2">
                 {needsAnswer && (
-                  <Button variant="primary" size="sm" disabled={acting || !note.trim()} onClick={() => moveTo("Todo", note)}>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    disabled={acting || !note.trim()}
+                    onClick={() => moveTo("Todo", note)}
+                  >
                     {acting ? "Working…" : "Send answer"}
                   </Button>
                 )}
@@ -469,7 +504,7 @@ function DetailPane({
                     <button
                       type="button"
                       disabled={acting}
-                      className="text-red-400 hover:underline"
+                      className="text-danger-primary hover:underline"
                       onClick={() => {
                         setConfirmCancel(false);
                         void moveTo("Cancelled", "");
@@ -477,7 +512,11 @@ function DetailPane({
                     >
                       Yes, cancel it
                     </button>
-                    <button type="button" className="text-tertiary hover:underline" onClick={() => setConfirmCancel(false)}>
+                    <button
+                      type="button"
+                      className="text-tertiary hover:underline"
+                      onClick={() => setConfirmCancel(false)}
+                    >
                       Keep
                     </button>
                   </>
@@ -569,7 +608,9 @@ function NewRunDialog({
       const [first, ...rest] = goal.trim().split("\n");
       await new IssueService().createIssue(workspaceSlug, projectId, {
         name: first.slice(0, 250),
-        description_html: rest.length ? `<p>${rest.join("</p><p>").replace(/<(?!\/?p>)/g, "&lt;")}</p>` : `<p>${first}</p>`,
+        description_html: rest.length
+          ? `<p>${rest.join("</p><p>").replace(/<(?!\/?p>)/g, "&lt;")}</p>`
+          : `<p>${first}</p>`,
         label_ids: [label.id],
         ...(todo ? { state_id: todo.id } : {}),
       });
@@ -595,14 +636,20 @@ function NewRunDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/50">
+      <button type="button" className="absolute inset-0 cursor-default" aria-label="Close" onClick={onClose} />
       <div
-        className="w-[560px] rounded-lg border border-subtle bg-surface-1 p-5 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="New run"
+        className="shadow-xl relative w-[560px] rounded-lg border border-subtle bg-surface-1 p-5"
       >
         <div className="mb-3 text-16 font-semibold text-primary">New run</div>
-        <label className="mb-1 block text-12 text-tertiary">Project</label>
+        <label htmlFor="new-run-project" className="mb-1 block text-12 text-tertiary">
+          Project
+        </label>
         <select
+          id="new-run-project"
           value={projectId}
           onChange={(e) => {
             setProjectId(e.target.value);
@@ -616,16 +663,19 @@ function NewRunDialog({
             </option>
           ))}
         </select>
-        <label className="mb-1 block text-12 text-tertiary">Goal</label>
+        <label htmlFor="new-run-goal" className="mb-1 block text-12 text-tertiary">
+          Goal
+        </label>
         <textarea
-          autoFocus
+          id="new-run-goal"
+          ref={(el) => el?.focus()}
           value={goal}
           onChange={(e) => setGoal(e.target.value)}
           rows={7}
           placeholder="Describe what to build. The factory plans it into dependent tasks, builds, reviews and merges them."
           className="w-full rounded border border-subtle bg-layer-1 p-2 text-13 text-primary outline-none focus:border-accent-strong"
         />
-        {error && <div className="mt-2 rounded bg-red-500/10 p-2 text-12 text-red-400">{error}</div>}
+        {error && <div className="mt-2 rounded bg-danger-subtle p-2 text-12 text-danger-primary">{error}</div>}
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="secondary" size="sm" onClick={onClose}>
             Cancel
@@ -686,7 +736,7 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
   }, [load]);
 
   const runs = useMemo(
-    () => (data?.runs ?? []).map((r) => (overrides[r.id] ? { ...r, ...overrides[r.id] } : r)),
+    () => (data?.runs ?? []).map((r) => (overrides[r.id] ? Object.assign({}, r, overrides[r.id]) : r)),
     [data, overrides]
   );
   const projects = useMemo(() => Array.from(new Set(runs.map((r) => r.project))), [runs]);
@@ -718,7 +768,10 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
   }, [notice]);
 
   const recentProjectId = useMemo(() => {
-    const newest = [...runs].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).find((r) => joinedProjectIds.includes(r.project_id));
+    // oxlint-disable-next-line unicorn/no-array-sort -- a copy; toSorted is ES2023 and the app targets ES2022
+    const newest = [...runs]
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+      .find((r) => joinedProjectIds.includes(r.project_id));
     return newest?.project_id ?? "";
   }, [runs, joinedProjectIds]);
 
@@ -726,12 +779,15 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
   const visibleRoots = runs
     .filter((r) => !r.parent_id || !known.has(r.parent_id))
     .filter((r) => matches(r) || (children[r.id] ?? []).some(matches))
+    // oxlint-disable-next-line unicorn/no-array-sort -- filter made a copy; the app targets ES2022
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
 
   const counts = (t: Tab) =>
     runs.filter((r) => {
       const s = statusOf(r);
-      return t === "All" || s === t || (t === "Active" && s === "Building") || (t === "Needs attention" && s === "Blocked");
+      return (
+        t === "All" || s === t || (t === "Active" && s === "Building") || (t === "Needs attention" && s === "Blocked")
+      );
     }).length;
   const sel = runs.find((r) => r.id === selected) ?? null;
   const identifier = sel ? (getProjectById(sel.project_id)?.identifier ?? "") : "";
@@ -768,7 +824,7 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search runs…"
-              className="w-72 rounded border border-subtle bg-layer-1 px-2 py-1 font-mono text-12 text-primary outline-none focus:border-accent-strong"
+              className="font-mono w-72 rounded border border-subtle bg-layer-1 px-2 py-1 text-12 text-primary outline-none focus:border-accent-strong"
             />
             <select
               value={project}
@@ -785,7 +841,7 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
             <div className="flex-1" />
             {data && (
               <span
-                className="flex items-center gap-2 rounded bg-layer-1 px-2 py-1 font-mono text-12 whitespace-nowrap text-secondary"
+                className="font-mono flex items-center gap-2 rounded bg-layer-1 px-2 py-1 text-12 whitespace-nowrap text-secondary"
                 title="Total spend across runs vs the factory's cost cap"
               >
                 ${data.spent.toFixed(2)}
@@ -793,7 +849,7 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
                   <>
                     <span className="h-1.5 w-16 overflow-hidden rounded bg-layer-2">
                       <span
-                        className={`block h-full ${capPct > 90 ? "bg-red-500" : "bg-accent-primary"}`}
+                        className={`block h-full ${capPct > 90 ? "bg-danger-primary" : "bg-accent-primary"}`}
                         style={{ width: `${capPct}%` }}
                       />
                     </span>
@@ -810,7 +866,7 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
           </div>
 
           {offline && (
-            <div className="flex items-center justify-between gap-3 border-b border-subtle bg-red-500/10 px-4 py-2 text-12 text-red-400">
+            <div className="flex items-center justify-between gap-3 border-b border-subtle bg-danger-subtle px-4 py-2 text-12 text-danger-primary">
               <span>
                 {unauthorized
                   ? "The factory board refused this browser (check the token)."
@@ -822,9 +878,13 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
             </div>
           )}
           {notice && (
-            <div className="flex items-center justify-between gap-3 border-b border-subtle bg-green-500/10 px-4 py-2 text-12 text-green-400">
+            <div className="flex items-center justify-between gap-3 border-b border-subtle bg-success-subtle px-4 py-2 text-12 text-success-primary">
               <span>{notice}</span>
-              <button type="button" className="text-green-400/70 hover:text-green-400" onClick={() => setNotice("")}>
+              <button
+                type="button"
+                className="text-success-primary hover:text-success-primary"
+                onClick={() => setNotice("")}
+              >
                 ✕
               </button>
             </div>
@@ -839,7 +899,7 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
                   tab === t ? "bg-layer-2 text-primary" : "text-tertiary hover:bg-layer-1"
                 }`}
               >
-                {t} <span className="ml-1 font-mono text-11 text-tertiary">{counts(t)}</span>
+                {t} <span className="font-mono ml-1 text-11 text-tertiary">{counts(t)}</span>
               </button>
             ))}
           </div>
@@ -851,7 +911,8 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
                   <>The factory board is not reachable. Use the gear icon above to check its URL and token.</>
                 ) : (
                   <>
-                    The factory is not reachable at {boardUrl()}. Start it with <span className="font-mono">factory up</span>.
+                    The factory is not reachable at {boardUrl()}. Start it with{" "}
+                    <span className="font-mono">factory up</span>.
                   </>
                 )}
               </div>
@@ -889,7 +950,9 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
           recentProjectId={recentProjectId}
           onClose={() => setDialog(false)}
           onCreated={(name) => {
-            setNotice(`Run started in ${name}. The planner is breaking it into tasks; they appear below within a minute.`);
+            setNotice(
+              `Run started in ${name}. The planner is breaking it into tasks; they appear below within a minute.`
+            );
             void load();
             setTimeout(() => void load(), 15000);
           }}

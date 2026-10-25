@@ -11,7 +11,14 @@ import { boardEventSourceUrl, boardFetch } from "@/lib/c-swarm-board";
 const MAX_RECORDS = 5000;
 const RESULT_LINES = 12;
 
-type Stream = { file: string; stage: string; role: string; size: number; updated: number; state: "running" | "done" | "stale" };
+type Stream = {
+  file: string;
+  stage: string;
+  role: string;
+  size: number;
+  updated: number;
+  state: "running" | "done" | "stale";
+};
 type Rec = { t: number; s: "meta" | "out" | "err" | "end"; x: string; o?: number };
 type Block =
   | { kind: "text"; text: string }
@@ -65,7 +72,9 @@ function resultText(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
     return content
-      .map((c) => (c && typeof c === "object" && "text" in c ? String((c as { text: unknown }).text) : JSON.stringify(c)))
+      .map((c) =>
+        c && typeof c === "object" && "text" in c ? String((c as { text: unknown }).text) : JSON.stringify(c)
+      )
       .join("\n");
   }
   return content == null ? "" : JSON.stringify(content);
@@ -96,7 +105,12 @@ function blocksFor(rec: Rec): Block[] {
       else if (c.type === "tool_use") {
         const name = String(c.name ?? "tool");
         const input = c.input as Record<string, unknown> | undefined;
-        out.push({ kind: "tool", name, summary: toolSummary(name, input), input: JSON.stringify(input ?? {}, null, 2) });
+        out.push({
+          kind: "tool",
+          name,
+          summary: toolSummary(name, input),
+          input: JSON.stringify(input ?? {}, null, 2),
+        });
       }
     }
     return out;
@@ -124,8 +138,10 @@ function ResultBlock({ text, isError }: { text: string; isError: boolean }) {
   const long = lines.length > RESULT_LINES;
   const shown = more || !long ? text : lines.slice(0, RESULT_LINES).join("\n");
   return (
-    <div className={`ml-4 rounded border-l-2 pl-2 ${isError ? "border-red-500" : "border-subtle"}`}>
-      <pre className={`font-mono text-11 whitespace-pre-wrap ${isError ? "text-red-400" : "text-tertiary"}`}>{shown || "(empty)"}</pre>
+    <div className={`ml-4 rounded border-l-2 pl-2 ${isError ? "border-danger-strong" : "border-subtle"}`}>
+      <pre className={`font-mono text-11 whitespace-pre-wrap ${isError ? "text-danger-primary" : "text-tertiary"}`}>
+        {shown || "(empty)"}
+      </pre>
       {long && (
         <button type="button" className="text-11 text-accent-primary hover:underline" onClick={() => setMore(!more)}>
           {more ? "show less" : `show ${lines.length - RESULT_LINES} more lines`}
@@ -140,11 +156,11 @@ function ToolBlock({ b }: { b: Extract<Block, { kind: "tool" }> }) {
   return (
     <div className="rounded bg-layer-1 px-2 py-1">
       <button type="button" className="flex w-full items-baseline gap-2 text-left" onClick={() => setOpen(!open)}>
-        <span className="shrink-0 font-mono text-11 font-semibold text-accent-primary">{b.name}</span>
-        <span className="min-w-0 flex-1 truncate font-mono text-12 text-secondary">{b.summary}</span>
+        <span className="font-mono shrink-0 text-11 font-semibold text-accent-primary">{b.name}</span>
+        <span className="font-mono min-w-0 flex-1 truncate text-12 text-secondary">{b.summary}</span>
         <span className="text-11 text-tertiary">{open ? "▾" : "▸"}</span>
       </button>
-      {open && <pre className="mt-1 font-mono text-11 whitespace-pre-wrap text-tertiary">{b.input}</pre>}
+      {open && <pre className="font-mono mt-1 text-11 whitespace-pre-wrap text-tertiary">{b.input}</pre>}
     </div>
   );
 }
@@ -165,15 +181,19 @@ function BlockView({ b }: { b: Block }) {
     case "result":
       return <ResultBlock text={b.text} isError={b.isError} />;
     case "summary":
-      return <div className="rounded bg-green-500/10 px-2 py-1 font-mono text-12 text-green-400">finished · {b.text}</div>;
+      return (
+        <div className="font-mono rounded bg-success-subtle px-2 py-1 text-12 text-success-primary">
+          finished · {b.text}
+        </div>
+      );
     case "info":
       return <div className="font-mono text-11 text-tertiary">{b.text}</div>;
     case "stderr":
-      return <pre className="font-mono text-12 whitespace-pre-wrap text-red-400">{b.text}</pre>;
+      return <pre className="font-mono text-12 whitespace-pre-wrap text-danger-primary">{b.text}</pre>;
     case "meta":
       return <pre className="font-mono text-11 whitespace-pre-wrap text-tertiary">{b.text}</pre>;
     case "end":
-      return <div className="border-t border-subtle pt-1 font-mono text-11 text-tertiary">— {b.text}</div>;
+      return <div className="font-mono border-t border-subtle pt-1 text-11 text-tertiary">— {b.text}</div>;
     default:
       return <pre className="font-mono text-12 whitespace-pre-wrap text-secondary">{b.text}</pre>;
   }
@@ -182,8 +202,8 @@ function BlockView({ b }: { b: Block }) {
 const label = (s: Stream) => (s.stage ? `${s.stage.replace("round-", "round ")} · ${s.role}` : s.role);
 
 function StateMark({ s }: { s: Stream["state"] }) {
-  if (s === "running") return <span className="inline-block size-1.5 animate-pulse rounded-full bg-green-500" />;
-  if (s === "done") return <span className="text-11 text-green-500">✓</span>;
+  if (s === "running") return <span className="inline-block size-1.5 animate-pulse rounded-full bg-success-primary" />;
+  if (s === "done") return <span className="text-11 text-success-primary">✓</span>;
   return <span className="text-11 text-tertiary">·</span>;
 }
 
@@ -243,6 +263,7 @@ export function LiveOutput({ project, seq, polling }: { project: string; seq: st
 
   const ordered = useMemo(() => {
     const rank = (s: Stream) => (s.state === "running" ? 0 : 1);
+    // oxlint-disable-next-line unicorn/no-array-sort -- a copy; toSorted is ES2023 and the app targets ES2022
     return [...(streams ?? [])].sort((a, b) => rank(a) - rank(b) || b.updated - a.updated);
   }, [streams]);
 
@@ -278,7 +299,7 @@ export function LiveOutput({ project, seq, polling }: { project: string; seq: st
     const connect = () => {
       if (closed) return;
       es = new EventSource(boardEventSourceUrl(`${path}/stream?file=${encodeURIComponent(file)}&offset=${offset}`));
-      es.onmessage = (m) => {
+      es.addEventListener("message", (m) => {
         try {
           const rec = JSON.parse(m.data as string) as Rec;
           if (typeof rec.o === "number") offset = rec.o;
@@ -286,16 +307,16 @@ export function LiveOutput({ project, seq, polling }: { project: string; seq: st
         } catch {
           /* ignore a malformed event */
         }
-      };
+      });
       es.addEventListener("done", () => {
         closed = true;
         es?.close();
         setEnded(true);
       });
-      es.onerror = () => {
+      es.addEventListener("error", () => {
         es?.close();
         if (!closed) retry = setTimeout(connect, 2000); // reconnect from the last offset
-      };
+      });
     };
     connect();
     return () => {
@@ -342,7 +363,7 @@ export function LiveOutput({ project, seq, polling }: { project: string; seq: st
         <span>{open ? "▾" : "▸"}</span>
         Live output
         {ordered.some((s) => s.state === "running") && (
-          <span className="inline-block size-1.5 animate-pulse rounded-full bg-green-500" title="running now" />
+          <span className="inline-block size-1.5 animate-pulse rounded-full bg-success-primary" title="running now" />
         )}
       </button>
       {open && (
@@ -367,7 +388,9 @@ export function LiveOutput({ project, seq, polling }: { project: string; seq: st
                       setFollowing(true);
                     }}
                     className={`flex items-center gap-1 rounded border px-2 py-0.5 text-11 ${
-                      s.file === file ? "border-accent-primary text-primary" : "border-subtle text-tertiary hover:text-primary"
+                      s.file === file
+                        ? "border-accent-primary text-primary"
+                        : "border-subtle text-tertiary hover:text-primary"
                     }`}
                   >
                     <StateMark s={s.state} />
@@ -376,7 +399,15 @@ export function LiveOutput({ project, seq, polling }: { project: string; seq: st
                 ))}
               </div>
               <div className="flex items-center gap-3 text-11 text-tertiary">
-                <span>{current ? (ended || current.state === "done" ? "Finished" : current.state === "stale" ? "Stopped without finishing" : "Streaming") : ""}</span>
+                <span>
+                  {current
+                    ? ended || current.state === "done"
+                      ? "Finished"
+                      : current.state === "stale"
+                        ? "Stopped without finishing"
+                        : "Streaming"
+                    : ""}
+                </span>
                 <span className="flex-1" />
                 <button type="button" className="hover:text-primary" onClick={() => setRaw(!raw)}>
                   {raw ? "Formatted" : "Raw"}
@@ -386,7 +417,7 @@ export function LiveOutput({ project, seq, polling }: { project: string; seq: st
                 </button>
                 <button
                   type="button"
-                  className={following ? "text-green-500" : "text-amber-400"}
+                  className={following ? "text-success-primary" : "text-warning-primary"}
                   onClick={() => (following ? setFollowing(false) : jump())}
                 >
                   {following ? "Following" : "Paused · jump to latest"}
@@ -401,15 +432,19 @@ export function LiveOutput({ project, seq, polling }: { project: string; seq: st
                 {rows.length === 0 && <div className="text-tertiary">No output yet.</div>}
                 <div className="flex flex-col gap-1.5">
                   {raw
-                    ? rows.map((r, i) => (
+                    ? rows.map((r) => (
                         <pre
-                          key={i}
-                          className={`font-mono text-11 whitespace-pre-wrap ${r.rec.s === "err" ? "text-red-400" : "text-secondary"}`}
+                          key={r.rec.o}
+                          className={`font-mono text-11 whitespace-pre-wrap ${r.rec.s === "err" ? "text-danger-primary" : "text-secondary"}`}
                         >
                           {r.rec.x}
                         </pre>
                       ))
-                    : rows.flatMap((r, i) => r.blocks.map((b, j) => <BlockView key={`${i}-${j}`} b={b} />))}
+                    : // a record's blocks never change once parsed, so their place in it is their identity
+                      // oxlint-disable-next-line react/no-array-index-key
+                      rows.flatMap((r) =>
+                        r.blocks.map((b, j) => <BlockView key={`${r.rec.o}-${b.kind}-${j}`} b={b} />)
+                      )}
                 </div>
               </div>
             </>

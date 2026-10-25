@@ -62,6 +62,11 @@ export const coreRoutes: RouteConfigEntry[] = [
         // Workspace Home
         route(":workspaceSlug", "./(all)/[workspaceSlug]/(projects)/page.tsx"),
 
+        // Agent inbox (what the factory's agents need from a person)
+        layout("./(all)/[workspaceSlug]/(projects)/agent-inbox/layout.tsx", [
+          route(":workspaceSlug/agent-inbox", "./(all)/[workspaceSlug]/(projects)/agent-inbox/page.tsx"),
+        ]),
+
         // Agents (factory runs)
         layout("./(all)/[workspaceSlug]/(projects)/agents/layout.tsx", [
           route(":workspaceSlug/agents", "./(all)/[workspaceSlug]/(projects)/agents/page.tsx"),
