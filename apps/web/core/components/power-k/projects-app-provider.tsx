@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // hooks
@@ -12,8 +12,8 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { usePowerK } from "@/hooks/store/use-power-k";
 import { useUser } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { useOpenedOnce } from "@/hooks/use-opened-once";
 // plane web imports
-import { ProjectLevelModals } from "@/components/modals/project-level";
 import { WorkItemLevelModals } from "@/components/modals/work-item-level";
 import { WorkspaceLevelModals } from "@/components/modals/workspace-level";
 // local imports
@@ -21,7 +21,11 @@ import { useProjectsAppPowerKCommands } from "./config/commands";
 import type { TPowerKCommandConfig, TPowerKContext } from "./core/types";
 import { GlobalShortcutsProvider } from "./global-shortcuts";
 import { ProjectsAppPowerKCommandsList } from "./ui/modal/commands-list";
-import { ProjectsAppPowerKModalWrapper } from "./ui/modal/wrapper";
+
+// The command palette loads on first open (Cmd+K), not with every page.
+const ProjectsAppPowerKModalWrapper = lazy(() =>
+  import("./ui/modal/wrapper").then((m) => ({ default: m.ProjectsAppPowerKModalWrapper }))
+);
 
 /**
  * Projects App PowerK provider
@@ -46,6 +50,7 @@ export const ProjectsAppPowerKProvider = observer(function ProjectsAppPowerKProv
   const workItemDetails = workItemId ? getIssueById(workItemId) : undefined;
   const projectId: string | string[] | undefined | null = routerProjectId ?? workItemDetails?.project_id;
   const commands = useProjectsAppPowerKCommands();
+  const paletteOpened = useOpenedOnce(isPowerKModalOpen);
   // Build command context from props and store
   const context: TPowerKContext = useMemo(
     () => ({
@@ -80,16 +85,17 @@ export const ProjectsAppPowerKProvider = observer(function ProjectsAppPowerKProv
     <>
       <GlobalShortcutsProvider context={context} commands={commands} />
       {workspaceSlug && <WorkspaceLevelModals workspaceSlug={workspaceSlug.toString()} />}
-      {workspaceSlug && projectId && (
-        <ProjectLevelModals workspaceSlug={workspaceSlug.toString()} projectId={projectId.toString()} />
-      )}
       <WorkItemLevelModals workItemIdentifier={workItemIdentifier?.toString()} />
-      <ProjectsAppPowerKModalWrapper
-        commandsListComponent={ProjectsAppPowerKCommandsList}
-        context={context}
-        isOpen={isPowerKModalOpen}
-        onClose={() => togglePowerKModal(false)}
-      />
+      {paletteOpened && (
+        <Suspense fallback={null}>
+          <ProjectsAppPowerKModalWrapper
+            commandsListComponent={ProjectsAppPowerKCommandsList}
+            context={context}
+            isOpen={isPowerKModalOpen}
+            onClose={() => togglePowerKModal(false)}
+          />
+        </Suspense>
+      )}
     </>
   );
 });

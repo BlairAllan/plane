@@ -4,21 +4,30 @@
  * See the LICENSE file for details.
  */
 
+import { lazy, Suspense } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
 import type { TIssue } from "@plane/types";
 import { EIssueServiceType, EIssuesStoreType } from "@plane/types";
-// components
-import { BulkDeleteIssuesModal } from "@/components/core/modals/bulk-delete-issues-modal";
-import { DeleteIssueModal } from "@/components/issues/delete-issue-modal";
-import { CreateUpdateIssueModal } from "@/components/issues/issue-modal/modal";
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useUser } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { useIssuesActions } from "@/hooks/use-issues-actions";
+import { useOpenedOnce } from "@/hooks/use-opened-once";
+
+// The create/edit dialog carries the rich-text editor; it and the delete dialogs load on first open, not with every page.
+const CreateUpdateIssueModal = lazy(() =>
+  import("@/components/issues/issue-modal/modal").then((m) => ({ default: m.CreateUpdateIssueModal }))
+);
+const DeleteIssueModal = lazy(() =>
+  import("@/components/issues/delete-issue-modal").then((m) => ({ default: m.DeleteIssueModal }))
+);
+const BulkDeleteIssuesModal = lazy(() =>
+  import("@/components/core/modals/bulk-delete-issues-modal").then((m) => ({ default: m.BulkDeleteIssuesModal }))
+);
 
 export type TWorkItemLevelModalsProps = {
   workItemIdentifier: string | undefined;
@@ -50,6 +59,9 @@ export const WorkItemLevelModals = observer(function WorkItemLevelModals(props: 
     toggleBulkDeleteIssueModal,
     createWorkItemAllowedProjectIds,
   } = useCommandPalette();
+  const createOpened = useOpenedOnce(isCreateIssueModalOpen);
+  const deleteOpened = useOpenedOnce(isDeleteIssueModalOpen);
+  const bulkDeleteOpened = useOpenedOnce(isBulkDeleteIssueModalOpen);
   // derived values
   const { fetchSubIssues: fetchSubWorkItems } = useIssueDetail();
   const { fetchSubIssues: fetchEpicSubWorkItems } = useIssueDetail(EIssueServiceType.EPICS);
@@ -82,15 +94,17 @@ export const WorkItemLevelModals = observer(function WorkItemLevelModals(props: 
   };
 
   return (
-    <>
-      <CreateUpdateIssueModal
-        isOpen={isCreateIssueModalOpen}
-        onClose={() => toggleCreateIssueModal(false)}
-        data={getCreateIssueModalData()}
-        onSubmit={handleCreateIssueSubmit}
-        allowedProjectIds={createWorkItemAllowedProjectIds}
-      />
-      {workspaceSlug && workItemId && workItemDetails && workItemDetails.project_id && (
+    <Suspense fallback={null}>
+      {createOpened && (
+        <CreateUpdateIssueModal
+          isOpen={isCreateIssueModalOpen}
+          onClose={() => toggleCreateIssueModal(false)}
+          data={getCreateIssueModalData()}
+          onSubmit={handleCreateIssueSubmit}
+          allowedProjectIds={createWorkItemAllowedProjectIds}
+        />
+      )}
+      {deleteOpened && workspaceSlug && workItemId && workItemDetails && workItemDetails.project_id && (
         <DeleteIssueModal
           handleClose={() => toggleDeleteIssueModal(false)}
           isOpen={isDeleteIssueModalOpen}
@@ -101,11 +115,13 @@ export const WorkItemLevelModals = observer(function WorkItemLevelModals(props: 
           isEpic={workItemDetails?.is_epic}
         />
       )}
-      <BulkDeleteIssuesModal
-        isOpen={isBulkDeleteIssueModalOpen}
-        onClose={() => toggleBulkDeleteIssueModal(false)}
-        user={currentUser}
-      />
-    </>
+      {bulkDeleteOpened && (
+        <BulkDeleteIssuesModal
+          isOpen={isBulkDeleteIssueModalOpen}
+          onClose={() => toggleBulkDeleteIssueModal(false)}
+          user={currentUser}
+        />
+      )}
+    </Suspense>
   );
 });

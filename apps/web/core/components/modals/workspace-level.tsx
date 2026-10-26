@@ -4,11 +4,15 @@
  * See the LICENSE file for details.
  */
 
+import { lazy, Suspense } from "react";
 import { observer } from "mobx-react";
-// components
-import { CreateProjectModal } from "@/components/project/create-project-modal";
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
+import { useOpenedOnce } from "@/hooks/use-opened-once";
+
+const CreateProjectModal = lazy(() =>
+  import("@/components/project/create-project-modal").then((m) => ({ default: m.CreateProjectModal }))
+);
 
 export type TWorkspaceLevelModalsProps = {
   workspaceSlug: string;
@@ -18,14 +22,16 @@ export const WorkspaceLevelModals = observer(function WorkspaceLevelModals(props
   const { workspaceSlug } = props;
   // store hooks
   const { isCreateProjectModalOpen, toggleCreateProjectModal } = useCommandPalette();
+  const opened = useOpenedOnce(isCreateProjectModalOpen);
 
+  if (!opened) return null;
   return (
-    <>
+    <Suspense fallback={null}>
       <CreateProjectModal
         isOpen={isCreateProjectModalOpen}
         onClose={() => toggleCreateProjectModal(false)}
         workspaceSlug={workspaceSlug.toString()}
       />
-    </>
+    </Suspense>
   );
 });
