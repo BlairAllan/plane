@@ -2,7 +2,9 @@
  * Where the c-swarm factory's board server lives, and how to talk to it.
  *
  * Locally it is http://127.0.0.1:8089 with no token. When hosted (Cloud Run) the URL is the service URL and every
- * request needs a bearer token. Settings persist in localStorage; NEXT_PUBLIC_* are build-time defaults.
+ * request needs a bearer token. Settings persist in localStorage. The deployment's default URL comes from
+ * /c-swarm-config.js, which the web container writes at start from CSWARM_BOARD_URL, so one image serves any
+ * deployment. The token has no deployment default: anything in a static file is public.
  * The token is only ever sent as an Authorization header, or as ?token= on EventSource URLs (EventSource cannot
  * set headers). It is never logged or rendered back in full.
  */
@@ -10,6 +12,16 @@
 export const DEFAULT_BOARD_URL = "http://127.0.0.1:8089";
 const URL_KEY = "cswarm.board.url";
 const TOKEN_KEY = "cswarm.board.token";
+
+declare global {
+  interface Window {
+    __CSWARM_CONFIG__?: { boardUrl?: string };
+  }
+}
+
+function deployed(): string {
+  return (typeof window !== "undefined" && window.__CSWARM_CONFIG__?.boardUrl) || "";
+}
 
 function stored(key: string): string {
   try {
@@ -20,12 +32,12 @@ function stored(key: string): string {
 }
 
 export function boardUrl(): string {
-  const raw = stored(URL_KEY) || process.env.NEXT_PUBLIC_CSWARM_BOARD_URL || DEFAULT_BOARD_URL;
+  const raw = stored(URL_KEY) || deployed() || process.env.VITE_CSWARM_BOARD_URL || DEFAULT_BOARD_URL;
   return raw.trim().replace(/\/+$/, "");
 }
 
 export function boardToken(): string {
-  return (stored(TOKEN_KEY) || process.env.NEXT_PUBLIC_CSWARM_BOARD_TOKEN || "").trim();
+  return stored(TOKEN_KEY).trim();
 }
 
 export function boardConfigured(): boolean {
@@ -84,9 +96,14 @@ export type BoardTest = { ok: boolean; message: string };
 export async function testBoard(): Promise<BoardTest> {
   try {
     const h = await boardFetch("/healthz", { cache: "no-store" });
-    if (!h.ok) return { ok: false, message: `The board answered ${h.status} on /healthz. Is this the factory's board URL?` };
+    if (!h.ok)
+      return { ok: false, message: `The board answered ${h.status} on /healthz. Is this the factory's board URL?` };
   } catch {
-    return { ok: false, message: "Unreachable. Check the URL, that the factory board is running, and that this page's origin is in BOARD_ALLOWED_ORIGINS." };
+    return {
+      ok: false,
+      message:
+        "Unreachable. Check the URL, that the factory board is running, and that this page's origin is in BOARD_ALLOWED_ORIGINS.",
+    };
   }
   try {
     const r = await boardFetch("/runs.json", { cache: "no-store" });
