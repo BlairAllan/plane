@@ -109,6 +109,13 @@ function BackBar({ onBack }: { onBack: () => void }) {
   );
 }
 
+// Start reading the inbox as soon as the route matches, alongside Plane's own workspace requests rather than after
+// them: the page's first poll, moments later, shares this request.
+export const clientLoader = () => {
+  fetchInbox().catch(() => undefined);
+  return null;
+};
+
 const AgentInboxPage = observer(function AgentInboxPage({ params }: Route.ComponentProps) {
   const { workspaceSlug } = params;
   const { getProjectById } = useProject();

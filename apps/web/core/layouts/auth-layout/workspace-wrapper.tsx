@@ -11,7 +11,6 @@ import { useParams } from "next/navigation";
 import useSWR from "swr";
 // ui
 import { LogOut } from "lucide-react";
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { Button, getButtonStyling } from "@plane/propel/button";
 import { PlaneLogo } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -27,13 +26,11 @@ import {
   WORKSPACE_PARTIAL_PROJECTS,
   WORKSPACE_MEMBER_ME_INFORMATION,
   WORKSPACE_PROJECTS_ROLES_INFORMATION,
-  WORKSPACE_FAVORITE,
   WORKSPACE_STATES,
   WORKSPACE_SIDEBAR_PREFERENCES,
   WORKSPACE_PROJECT_NAVIGATION_PREFERENCES,
 } from "@plane/constants";
 // hooks
-import { useFavorite } from "@/hooks/store/use-favorite";
 import { useMember } from "@/hooks/store/use-member";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectState } from "@/hooks/store/use-project-state";
@@ -53,20 +50,14 @@ export const WorkspaceAuthWrapper = observer(function WorkspaceAuthWrapper(props
   // store hooks
   const { signOut, data: currentUser } = useUser();
   const { fetchPartialProjects } = useProject();
-  const { fetchFavorite } = useFavorite();
   const {
     workspace: { fetchWorkspaceMembers },
   } = useMember();
   const { workspaces, fetchSidebarNavigationPreferences, fetchProjectNavigationPreferences } = useWorkspace();
   const { isMobile } = usePlatformOS();
-  const { loader, workspaceInfoBySlug, fetchUserWorkspaceInfo, fetchUserProjectPermissions, allowPermissions } =
-    useUserPermissions();
+  const { loader, workspaceInfoBySlug, fetchUserWorkspaceInfo, fetchUserProjectPermissions } = useUserPermissions();
   const { fetchWorkspaceStates } = useProjectState();
   // derived values
-  const canPerformWorkspaceMemberActions = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.WORKSPACE
-  );
   const allWorkspaces = workspaces ? Object.values(workspaces) : undefined;
   const currentWorkspace =
     (allWorkspaces && allWorkspaces.find((workspace) => workspace?.slug === workspaceSlug)) || undefined;
@@ -96,16 +87,7 @@ export const WorkspaceAuthWrapper = observer(function WorkspaceAuthWrapper(props
     workspaceSlug && currentWorkspace ? () => fetchWorkspaceMembers(workspaceSlug.toString()) : null,
     { revalidateIfStale: false, revalidateOnFocus: false }
   );
-  // fetch workspace favorite
-  useSWR(
-    workspaceSlug && currentWorkspace && canPerformWorkspaceMemberActions
-      ? WORKSPACE_FAVORITE(workspaceSlug.toString())
-      : null,
-    workspaceSlug && currentWorkspace && canPerformWorkspaceMemberActions
-      ? () => fetchFavorite(workspaceSlug.toString())
-      : null,
-    { revalidateIfStale: false, revalidateOnFocus: false }
-  );
+  // c-swarm: no favourites fetch; the favourites menu is not part of the factory UI
   // fetch workspace states
   useSWR(
     workspaceSlug ? WORKSPACE_STATES(workspaceSlug.toString()) : null,
@@ -159,14 +141,16 @@ export const WorkspaceAuthWrapper = observer(function WorkspaceAuthWrapper(props
             </div>
             <div className="relative flex items-center gap-2">
               <div className="text-13 font-medium">{currentUser?.email}</div>
-              <div
+              <button
+                type="button"
+                aria-label="Sign out"
                 className="relative flex h-6 w-6 flex-shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-sm hover:bg-layer-1"
                 onClick={handleSignOut}
               >
                 <Tooltip tooltipContent={"Sign out"} position="top" className="ml-2" isMobile={isMobile}>
                   <LogOut size={14} />
                 </Tooltip>
-              </div>
+              </button>
             </div>
           </div>
           <div className="relative flex h-full w-full flex-grow flex-col items-center justify-center space-y-3">
