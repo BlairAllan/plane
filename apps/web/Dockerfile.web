@@ -80,8 +80,12 @@ FROM nginx:1.31-alpine AS production
 RUN apk update && apk upgrade --no-cache && rm -rf /var/cache/apk/*
 
 COPY apps/web/nginx/nginx.conf /etc/nginx/nginx.conf
+COPY apps/web/nginx/security-headers.conf /etc/nginx/security-headers.conf
 COPY --chmod=0755 apps/web/nginx/40-c-swarm-config.sh /docker-entrypoint.d/40-c-swarm-config.sh
 COPY --from=installer /app/apps/web/build/client /usr/share/nginx/html
+# c-swarm: compress once here instead of on every request (served by gzip_static)
+RUN find /usr/share/nginx/html -type f \( -name '*.js' -o -name '*.css' -o -name '*.html' -o -name '*.svg' -o -name '*.json' \) \
+      -size +1k -exec gzip -9 -k {} +
 
 EXPOSE 3000
 
