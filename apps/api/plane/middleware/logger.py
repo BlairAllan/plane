@@ -131,9 +131,10 @@ class APITokenLogMiddleware:
         api_key_header = "X-Api-Key"
         api_key = request.headers.get(api_key_header)
 
-        # If the API key is not present, return
-        if not api_key:
+        # If the API key is not present, or API activity is not recorded, return
+        if not api_key or settings.API_ACTIVITY_LOG == "off":
             return
+        with_bodies = settings.API_ACTIVITY_LOG != "meta"
 
         try:
             log_data = {
@@ -148,8 +149,10 @@ class APITokenLogMiddleware:
                 "method": request.method,
                 "query_params": request.META.get("QUERY_STRING", ""),
                 "headers": self._redacted_headers(request),
-                "body": self._safe_decode_body(request_body) if request_body else None,
-                "response_body": self._safe_decode_body(response.content) if response.content else None,
+                "body": self._safe_decode_body(request_body) if with_bodies and request_body else None,
+                "response_body": (
+                    self._safe_decode_body(response.content) if with_bodies and response.content else None
+                ),
                 "response_code": response.status_code,
                 "ip_address": get_client_ip(request=request),
                 "user_agent": request.META.get("HTTP_USER_AGENT", None),

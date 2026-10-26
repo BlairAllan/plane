@@ -443,6 +443,10 @@ def _retention_days(env_var, default):
 # API activity logs hold request/response payloads, so they are retained for a
 # shorter window than other logs.
 API_ACTIVITY_LOG_RETENTION_DAYS = _retention_days("API_ACTIVITY_LOG_RETENTION_DAYS", 14)
+# What an API-key request records: "full" (request and response bodies, upstream's behaviour), "meta" (who called
+# what and the status, no bodies) or "off". Each record is a Celery task published inside the request, and a list
+# endpoint's body can be hundreds of KB, so a client that polls (an agent factory) pays for it on every call.
+API_ACTIVITY_LOG = os.environ.get("API_ACTIVITY_LOG", "full").strip().lower()
 
 # Webhook delivery logs are retained on their own window, independent of the
 # generic HARD_DELETE_AFTER_DAYS.

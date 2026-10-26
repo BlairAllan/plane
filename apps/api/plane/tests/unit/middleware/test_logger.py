@@ -77,3 +77,22 @@ class TestAPITokenLogMiddleware:
         with patch("plane.middleware.logger.process_logs") as process_logs:
             middleware.process_request(request, HttpResponse(b"{}"), request_body=b"")
             assert not process_logs.delay.called
+
+    def test_off_records_nothing(self, middleware, request_factory, settings):
+        settings.API_ACTIVITY_LOG = "off"
+        request = request_factory.get("/api/v1/workspaces/", HTTP_X_API_KEY=self.API_KEY)
+        request.user = AnonymousUser()
+        with patch("plane.middleware.logger.process_logs") as process_logs:
+            middleware.process_request(request, HttpResponse(b'{"big": "list"}'), request_body=b"")
+            assert not process_logs.delay.called
+
+    def test_meta_records_the_call_without_bodies(self, middleware, request_factory, settings):
+        settings.API_ACTIVITY_LOG = "meta"
+        request = request_factory.post("/api/v1/workspaces/", data=b'{"name": "x"}', content_type="application/json",
+                                       HTTP_X_API_KEY=self.API_KEY)
+        request.user = AnonymousUser()
+        with patch("plane.middleware.logger.process_logs") as process_logs:
+            middleware.process_request(request, HttpResponse(b'{"big": "list"}', status=201), request_body=b'{"name": "x"}')
+            log_data = process_logs.delay.call_args.kwargs["log_data"]
+        assert log_data["path"] == "/api/v1/workspaces/" and log_data["response_code"] == 201
+        assert log_data["body"] is None and log_data["response_body"] is None
