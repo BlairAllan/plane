@@ -227,6 +227,33 @@ export const coreRoutes: RouteConfigEntry[] = [
   // → /:workspaceSlug/settings/projects/:projectId/:path*
   route(":workspaceSlug/projects/:projectId/settings/*", "routes/redirects/core/project-settings.tsx"),
 
+  // Pages removed from the factory UI -> a project's work items, or the Agent inbox
+  route(":workspaceSlug/analytics/*", "routes/redirects/core/removed.tsx", { id: "removed-analytics" }),
+  route(":workspaceSlug/drafts", "routes/redirects/core/removed.tsx", { id: "removed-drafts" }),
+  route(":workspaceSlug/notifications", "routes/redirects/core/removed.tsx", { id: "removed-notifications" }),
+  route(":workspaceSlug/profile/*", "routes/redirects/core/removed.tsx", { id: "removed-profile" }),
+  route(":workspaceSlug/stickies", "routes/redirects/core/removed.tsx", { id: "removed-stickies" }),
+  route(":workspaceSlug/workspace-views/*", "routes/redirects/core/removed.tsx", { id: "removed-workspace-views" }),
+  route(":workspaceSlug/projects/archives", "routes/redirects/core/removed.tsx", { id: "removed-projects-archives" }),
+  route(":workspaceSlug/projects/:projectId/cycles/*", "routes/redirects/core/removed.tsx", {
+    id: "removed-project-cycles",
+  }),
+  route(":workspaceSlug/projects/:projectId/modules/*", "routes/redirects/core/removed.tsx", {
+    id: "removed-project-modules",
+  }),
+  route(":workspaceSlug/projects/:projectId/views/*", "routes/redirects/core/removed.tsx", {
+    id: "removed-project-views",
+  }),
+  route(":workspaceSlug/projects/:projectId/pages/*", "routes/redirects/core/removed.tsx", {
+    id: "removed-project-pages",
+  }),
+  route(":workspaceSlug/projects/:projectId/intake", "routes/redirects/core/removed.tsx", {
+    id: "removed-project-intake",
+  }),
+  route(":workspaceSlug/projects/:projectId/archives/*", "routes/redirects/core/removed.tsx", {
+    id: "removed-project-archives",
+  }),
+
   // API tokens redirect: /:workspaceSlug/settings/api-tokens
   // → /settings/profile/api-tokens
   route(":workspaceSlug/settings/api-tokens", "routes/redirects/core/api-tokens.tsx"),

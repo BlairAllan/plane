@@ -47,7 +47,8 @@ type Run = {
 };
 type RunsResponse = { runs: Run[]; spent: number; cap: number };
 type Post = { ts: number; role: string; ref?: string; text: string };
-type Infra = { notes: Record<string, { ts: number; role: string; text: string }[]>; boards: Record<string, Post[]> };
+type Note = { ts: number; role: string; text: string };
+type Infra = { boards: Record<string, Post[]> };
 
 type Status =
   | "Blocked"
@@ -283,7 +284,14 @@ function DetailPane({
   const status = statusOf(run);
   const board = (infra?.boards?.[run.project_id] ?? []).slice(-12);
   board.reverse(); // a copy from slice; newest first
-  const notes = infra?.notes?.[`${run.project_id}:${seqOf(run.ref)}`] ?? [];
+  // only the open run's notes, fetched for it (a 304 while nothing new); not every run's, for every viewer
+  const [notes, setNotes] = useState<Note[]>([]);
+  const notesPath = `/runs/${encodeURIComponent(run.project)}/${encodeURIComponent(seqOf(run.ref))}/notes.json`;
+  const loadNotes = useCallback(async () => {
+    const r = await boardJson<{ notes: Note[] }>(notesPath).catch(() => null);
+    setNotes(r?.value?.notes ?? []);
+  }, [notesPath]);
+  usePoll(loadNotes, 5000);
   const workItemHref = identifier ? `/${workspaceSlug}/browse/${identifier}-${seqOf(run.ref)}/` : "";
 
   const state = run.plane_state;
