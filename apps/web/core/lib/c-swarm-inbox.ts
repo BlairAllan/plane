@@ -13,7 +13,7 @@
  * the way an email client keeps read state.
  */
 
-import { boardFetch } from "@/lib/c-swarm-board";
+import { boardFetch, boardJson } from "@/lib/c-swarm-board";
 
 export type Question = {
   id: string;
@@ -82,9 +82,9 @@ let shared: { at: number; p: Promise<InboxResponse> } | null = null;
 
 export function fetchInbox(): Promise<InboxResponse> {
   if (shared && Date.now() - shared.at < 2000) return shared.p;
-  const p = boardFetch("/inbox.json", { cache: "no-store" }).then((r) => {
-    if (!r.ok) throw new Error(`inbox ${r.status}`);
-    return r.json() as Promise<InboxResponse>;
+  const p = boardJson<InboxResponse>("/inbox.json").then((r) => {
+    if (!r.ok || !r.value) throw new Error(`inbox ${r.status}`);
+    return r.value;
   });
   shared = { at: Date.now(), p };
   p.catch(() => {

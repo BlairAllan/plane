@@ -83,6 +83,29 @@ export function boardFetch(path: string, init: RequestInit = {}): Promise<Respon
   return fetch(`${boardUrl()}${path}`, { ...init, headers });
 }
 
+// Last body seen per path and its ETag, so a poll that finds nothing new costs a 304 with no body, and hands back the
+// very same object: React sees an unchanged reference and skips the re-render.
+const lastSeen = new Map<string, { etag: string; value: unknown }>();
+
+export type BoardJson<T> = { ok: boolean; status: number; value: T | null };
+
+/** GET a board JSON document, conditionally when we already hold a version of it. */
+export async function boardJson<T>(path: string): Promise<BoardJson<T>> {
+  const key = `${boardUrl()}${path}`;
+  const held = lastSeen.get(key);
+  const r = await boardFetch(path, {
+    cache: "no-store",
+    headers: held ? { "If-None-Match": held.etag } : undefined,
+  });
+  if (r.status === 304 && held) return { ok: true, status: 200, value: held.value as T };
+  if (!r.ok) return { ok: false, status: r.status, value: null };
+  const value = (await r.json()) as T;
+  const etag = r.headers.get("ETag");
+  if (etag) lastSeen.set(key, { etag, value });
+  else lastSeen.delete(key);
+  return { ok: true, status: r.status, value };
+}
+
 /** URL for an EventSource (which cannot send headers): the token rides as ?token=. */
 export function boardEventSourceUrl(path: string): string {
   const token = boardToken();

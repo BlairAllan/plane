@@ -12,7 +12,8 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { BoardConnection } from "@/components/agents/board-connection";
 import { LiveOutput } from "@/components/agents/live-output";
 import { PageHead } from "@/components/core/page-title";
-import { boardConfigured, boardFetch, boardUrl } from "@/lib/c-swarm-board";
+import { usePoll } from "@/hooks/use-poll";
+import { boardConfigured, boardJson, boardUrl } from "@/lib/c-swarm-board";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { IssueCommentService, IssueLabelService, IssueService } from "@/services/issue";
@@ -708,10 +709,10 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
 
   const load = useCallback(async () => {
     try {
-      const [r, i] = await Promise.all([boardFetch("/runs.json"), boardFetch("/factory.json")]);
+      const [r, i] = await Promise.all([boardJson<RunsResponse>("/runs.json"), boardJson<Infra>("/factory.json")]);
       setUnauthorized(r.status === 401 || r.status === 403 || r.status === 404);
-      if (!r.ok) throw new Error("runs");
-      const fresh: RunsResponse = await r.json();
+      if (!r.ok || !r.value) throw new Error("runs");
+      const fresh = r.value;
       setData(fresh);
       // drop optimistic patches once the server reports the same Plane state
       setOverrides((o) => {
@@ -722,18 +723,14 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
         }
         return Object.keys(next).length === Object.keys(o).length ? o : next;
       });
-      if (i.ok) setInfra(await i.json());
+      if (i.ok) setInfra(i.value);
       setOffline(false);
     } catch {
       setOffline(true);
     }
   }, []);
 
-  useEffect(() => {
-    void load();
-    const t = setInterval(load, 5000);
-    return () => clearInterval(t);
-  }, [load]);
+  usePoll(load, 5000);
 
   const runs = useMemo(
     () => (data?.runs ?? []).map((r) => (overrides[r.id] ? Object.assign({}, r, overrides[r.id]) : r)),
@@ -768,8 +765,8 @@ const AgentsPage = observer(function AgentsPage({ params }: Route.ComponentProps
   }, [notice]);
 
   const recentProjectId = useMemo(() => {
-    // oxlint-disable-next-line unicorn/no-array-sort -- a copy; toSorted is ES2023 and the app targets ES2022
     const newest = [...runs]
+      // oxlint-disable-next-line unicorn/no-array-sort -- a copy; toSorted is ES2023 and the app targets ES2022
       .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
       .find((r) => joinedProjectIds.includes(r.project_id));
     return newest?.project_id ?? "";

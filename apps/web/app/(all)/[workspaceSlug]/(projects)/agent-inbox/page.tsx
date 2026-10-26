@@ -12,6 +12,7 @@ import { ThreadPane } from "@/components/agents/inbox/thread-pane";
 import { PageHead } from "@/components/core/page-title";
 import { useProject } from "@/hooks/store/use-project";
 import { useUser } from "@/hooks/store/user";
+import { usePoll } from "@/hooks/use-poll";
 import { boardUrl } from "@/lib/c-swarm-board";
 import type { BoardPost, InboxResponse, Thread, View } from "@/lib/c-swarm-inbox";
 import { VIEWS, fetchInbox, markSeen, readAside, readSeen, setAside, unsetAside, viewOf } from "@/lib/c-swarm-inbox";
@@ -138,11 +139,15 @@ const AgentInboxPage = observer(function AgentInboxPage({ params }: Route.Compon
   const wide = width >= 1100; // project rail, list and thread side by side
   const split = width >= 720; // list and thread side by side; below this, one at a time
 
+  const lastInbox = useRef<InboxResponse | null>(null);
   const load = useCallback(async () => {
     try {
       const fresh = await fetchInbox();
-      setData(fresh);
       setOffline(false);
+      // a 304 hands back the same object: nothing changed, so nothing to re-render
+      if (fresh === lastInbox.current) return;
+      lastInbox.current = fresh;
+      setData(fresh);
       // optimistic changes stay until the server reports the same Plane state
       setPatches((p) => {
         const next: Record<string, Partial<Thread>> = {};
@@ -161,10 +166,8 @@ const AgentInboxPage = observer(function AgentInboxPage({ params }: Route.Compon
   useEffect(() => {
     setSeen(readSeen());
     setAsideMap(readAside());
-    void load();
-    const t = setInterval(load, 8000);
-    return () => clearInterval(t);
-  }, [load]);
+  }, []);
+  usePoll(load, 8000);
 
   const threads = useMemo(
     () =>

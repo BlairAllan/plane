@@ -4,31 +4,26 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import { usePoll } from "@/hooks/use-poll";
 import { fetchInbox, needsYou } from "@/lib/c-swarm-inbox";
 
 /** How many tickets need a person, beside "Agent inbox" in the sidebar. Silent when the board is unreachable. */
 export function AgentInboxBadge() {
   const [count, setCount] = useState(0);
   const [stopped, setStopped] = useState(false);
-  useEffect(() => {
-    let live = true;
-    const load = () =>
+  const load = useCallback(
+    () =>
       fetchInbox()
         .then((r) => {
-          if (!live) return undefined;
           setCount(r.threads.filter(needsYou).length);
           setStopped(r.threads.some((t) => t.section === "stopped"));
           return undefined;
         })
-        .catch(() => live && setCount(0));
-    void load();
-    const t = setInterval(load, 30000);
-    return () => {
-      live = false;
-      clearInterval(t);
-    };
-  }, []);
+        .catch(() => setCount(0)),
+    []
+  );
+  usePoll(load, 30000);
   if (!count) return null;
   return (
     <span
