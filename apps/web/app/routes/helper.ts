@@ -9,22 +9,25 @@ import type { RouteConfigEntry } from "@react-router/dev/routes";
 /**
  * Merges two route configurations intelligently.
  * - Deep merges children when the same layout file exists in both arrays
- * - Deduplicates routes by file property, preferring extended over core
+ * - Deduplicates routes by id, or by file when there is no id (several routes may share one module, each with
+ *   its own id), preferring extended over core
  * - Maintains order: core routes first, then extended routes at each level
  */
+const keyOf = (route: RouteConfigEntry): string => route.id ?? route.file;
+
 export function mergeRoutes(core: RouteConfigEntry[], extended: RouteConfigEntry[]): RouteConfigEntry[] {
   // Step 1: Create a Map to track routes by file path
   const routeMap = new Map<string, RouteConfigEntry>();
 
   // Step 2: Process core routes first
   for (const coreRoute of core) {
-    const fileKey = coreRoute.file;
+    const fileKey = keyOf(coreRoute);
     routeMap.set(fileKey, coreRoute);
   }
 
   // Step 3: Process extended routes
   for (const extendedRoute of extended) {
-    const fileKey = extendedRoute.file;
+    const fileKey = keyOf(extendedRoute);
 
     if (routeMap.has(fileKey)) {
       // Route exists in both - need to merge
@@ -56,7 +59,7 @@ export function mergeRoutes(core: RouteConfigEntry[], extended: RouteConfigEntry
 
   // Add all core routes (now merged or original)
   for (const coreRoute of core) {
-    const fileKey = coreRoute.file;
+    const fileKey = keyOf(coreRoute);
     if (routeMap.has(fileKey)) {
       result.push(routeMap.get(fileKey)!);
       routeMap.delete(fileKey); // Remove so we don't add it again
@@ -65,7 +68,7 @@ export function mergeRoutes(core: RouteConfigEntry[], extended: RouteConfigEntry
 
   // Add remaining extended-only routes
   for (const extendedRoute of extended) {
-    const fileKey = extendedRoute.file;
+    const fileKey = keyOf(extendedRoute);
     if (routeMap.has(fileKey)) {
       result.push(routeMap.get(fileKey)!);
       routeMap.delete(fileKey);
