@@ -218,6 +218,18 @@ else:
     }
 
 
+# c-swarm: with CONN_MAX_AGE 0 every request opened a new Postgres connection (TCP + auth, 20-80 ms locally;
+# a query on an open one is ~1 ms). DATABASE_POOL_MAX_SIZE > 0 turns on Django's psycopg 3 pool per process.
+# Set it on the API (gunicorn) only: Celery's prefork workers must not inherit a pool across fork().
+DATABASE_POOL_MAX_SIZE = int(os.environ.get("DATABASE_POOL_MAX_SIZE", "0") or 0)
+if DATABASE_POOL_MAX_SIZE > 0:
+    DATABASES["default"].setdefault("OPTIONS", {})["pool"] = {
+        "min_size": 1,
+        "max_size": DATABASE_POOL_MAX_SIZE,
+        "timeout": 10,
+    }
+    DATABASES["default"]["CONN_MAX_AGE"] = 0  # the pool owns connection lifetime; Django requires 0 with it
+
 if os.environ.get("ENABLE_READ_REPLICA", "0") == "1":
     if bool(os.environ.get("DATABASE_READ_REPLICA_URL")):
         # Parse database configuration from $DATABASE_URL

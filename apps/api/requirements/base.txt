@@ -8,6 +8,7 @@ djangorestframework==3.17.1
 psycopg==3.3.4
 psycopg-binary==3.3.4
 psycopg-c==3.3.4
+psycopg-pool==3.3.3
 dj-database-url==3.0.1
 # redis
 redis==5.0.4
